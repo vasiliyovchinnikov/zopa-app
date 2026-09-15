@@ -561,6 +561,7 @@ function startSession(scen, d) {
 function renderSession() {
   const box = $id('drill-live');
   if (!box) return;
+  if (session.over) return; // партия закончена — чат не пересоздаём, чтобы не затирать разбор отложенными репликами ИИ
   if (!$id('chat')) {
     box.innerHTML = `<div class="card">
       <div id="hud" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;font-size:14px"><span>🎯 Очки: <strong id="hud-score">0</strong></span><span>🔥 Серия: <strong id="hud-streak">0</strong></span><span class="fine" id="hud-goal">${esc(session.deal.main.name || '')}</span></div>
