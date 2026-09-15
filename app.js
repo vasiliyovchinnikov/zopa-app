@@ -7,6 +7,14 @@
 const $id = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (n) => Math.round(Number(n)).toLocaleString('ru-RU');
+// Формат с юнитом кейса: % → «42%», млн ₽ → «12,5 млн ₽», рубли → «700 000 ₽»-стайл
+function fmtU(n, scen) {
+  const v = Number(n);
+  if (!scen || !scen.unit || scen.unit === '₽') return fmt(n) + ' ₽';
+  if (scen.unit === '%') return fmt(n) + '%';
+  if (scen.unit === 'млн ₽') return String(Math.round(v * 10) / 10).replace('.', ',') + ' млн ₽';
+  return fmt(n) + ' ' + scen.unit;
+}
 
 const DEAL_KEY = 'zopa_deal_v1';
 let SCEN = [];
@@ -40,7 +48,7 @@ const SCEN_FALLBACK = [
 ];
 async function loadScenarios() {
   try {
-    const r = await fetch('scenarios.json?v=1');
+    const r = await fetch('scenarios.json?v=3');
     const j = await r.json();
     const list = (j.profiles || []).filter((p) => p && p.id && p.title);
     if (list.length) SCEN = list;
@@ -68,7 +76,7 @@ const TONE_CFO = {
 function tone(s, kind, n, i) {
   const bank = (s.id === 'cfo' ? TONE_CFO : TONE_PROC)[kind];
   const line = bank[i == null ? Math.min(session.round, bank.length - 1) : i];
-  return line.replace('{N}', fmt(n));
+  return line.replace('{N}', fmtU(n, session.scen || session));
 }
 
 /* ---------------- утилиты парсинга ---------------- */
@@ -451,6 +459,22 @@ function demoDeal() {
   };
 }
 
+// Геймдев-кейс: сделка строится из профиля (метрика %, млн ₽, зоны из фактуры рынка)
+function dealFromScen(scen) {
+  const sell = scen.sell !== false; // % студии/бюджет — «продаю» свою долю/услугу; у buyout/angel роль зеркальная
+  return {
+    demo: true, title: scen.title, role: scen.sell ? 'sell' : 'buy',
+    main: { name: scen.unitWord || 'Метрика', reserve: String(scen.userReserve), target: String(scen.userGoal) },
+    opp: { name: scen.short || '', limit: String(scen.oppFloor) },
+    extras: [
+      { name: 'Контекст рынка', note: (scen.facts && scen.facts[0]) || '' },
+      { name: 'Предметы торга', note: (scen.facts && scen.facts[2]) || '' },
+      { name: 'Красный флаг', note: (scen.tells && scen.tells[2]) || '' }
+    ],
+    scen: scen.id
+  };
+}
+
 function viewDrill() { return `<div id="drill-root"></div>`; }
 
 function initDrill() {
@@ -458,26 +482,38 @@ function initDrill() {
   const d = loadDeal();
   if (!d) {
     root.innerHTML = `<div class="card">
-      <h2>Сначала — подготовка</h2>
-      <p>Тренажёр играет от вашей подготовки: берёт ваш резерв, цель и оценку лимита из раздела «Собрать». Без неё игра нечестная.</p>
+      <h2>Выберите кейс</h2>
+      <p>Кейсы геймдев-переговоров: метрика и зоны заданы сценарием на основе рыночной фактуры. Своя сделка — по кнопке ниже.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn" id="d-demo">Играть на демо-сделке</button>
-        <button class="btn ghost" id="d-build">Заполнить свою →</button>
-      </div></div>`;
-    $id('d-demo').onclick = () => { saveDeal(demoDeal()); initDrill(); };
+        <button class="btn ghost" id="d-build">Своя сделка →</button>
+      </div></div>
+      <div id="scen-list"></div>
+      <div id="drill-live"></div>`;
     $id('d-build').onclick = () => nav('build');
+    const list = $id('scen-list');
+    SCEN.forEach((s, i) => {
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.style.cssText = 'margin:10px 0;cursor:pointer;border-color:var(--line)';
+      el.dataset.scen = String(i);
+      el.innerHTML = `<h3 style="margin:0 0 6px">${esc(s.title)}</h3><p style="margin:0">${esc(s.desc)}</p><p class="fine" style="margin:8px 0 0">Манера: ${esc(s.tone || 'деловая')}</p>`;
+      el.onclick = () => { saveDeal(dealFromScen(s)); startSession(s, loadDeal()); };
+      list.appendChild(el);
+    });
     return;
   }
   let html = `<div class="card"><span class="badge">Тренажёр</span>
-    <h2>${d.demo ? 'Демо-сделка: ' : ''}${esc(d.title || 'переговоры')}</h2>
-    <p>Вы — ${d.role === 'sell' ? 'продающая сторона' : 'покупающая сторона'}. Резерв: ${fmt(d.main.reserve)}, цель: ${fmt(d.main.target)}.</p>
+    <h2>${d.demo ? 'Кейс: ' : ''}${esc(d.title || 'переговоры')}</h2>
+    <p>Вы — ${d.role === 'sell' ? 'продающая сторона' : 'покупающая сторона'}. ${scenDealInfo(d)}</p>
     <h3 style="margin-top:14px">Выберите контрагента</h3>`;
   SCEN.forEach((s, i) => {
     html += `<div class="card" style="margin:10px 0;cursor:pointer;border-color:var(--line)" data-scen="${i}">
       <h3 style="margin:0 0 6px">${esc(s.title)}</h3><p style="margin:0">${esc(s.desc)}</p>
       <p class="fine" style="margin:8px 0 0">Манера: ${esc(s.tone || 'деловая')}</p></div>`;
   });
-  html += `<p class="fine">Лимит контрагента скрыт и в каждой партии свой. Задача: нащупать его зону и не отдать свою.</p></div>
+  const g = loadGame();
+  html += `<p class="fine">Лимит контрагента скрыт и в каждой партии свой. Задача: нащупать его зону и не отдать свою.</p>
+  <p>🏅 Всего очков: <strong>${g.total}</strong> · партий: ${g.played} · лучший счёт: <strong>${g.best}</strong>${g.badges.length ? ' · ачивок: ' + g.badges.length : ''}</p></div>
   ${aiSettingsHtml()}
   <div id="drill-live"></div>`;
   root.innerHTML = html;
@@ -487,25 +523,37 @@ function initDrill() {
   });
 }
 
+// Короткая строка про метрику кейса в шапке выбора контрагента
+function scenDealInfo(d) {
+  if (!d.demo) return `Резерв: ${fmt(d.main.reserve)} ₽, цель: ${fmt(d.main.target)} ₽.`;
+  return `Метрика: ${esc(d.main.name)}. Ваша стоп-линия: ${esc(d.main.reserve)}, цель: ${esc(d.main.target)}.`;
+}
+
 function startSession(scen, d) {
   const z = zoneCalc(d);
   const rnd = (a, b) => a + Math.random() * (b - a);
+  const isPct = scen.unit === '%';
+  const isMln = scen.unit === 'млн ₽';
+  const scale = isPct ? 1 : 1; // значения уже в единицах метрики
   let floor, offer;
   if (z.sell) {
-    floor = Math.round(Number(d.opp.limit) * rnd(0.9, 1.1));
-    offer = Math.round((floor * rnd(0.58, 0.72)) / 1000) * 1000;
+    // Мы «отдаём» метрику (доля/услуга): их floor — минимум, который они примут; старт НИЖЕ (жадный оффер)
+    floor = scen.oppFloor * rnd(0.92, 1.08);
+    offer = scen.oppFloor * rnd(0.45, 0.6);
   } else {
-    floor = Math.round(Number(d.opp.limit) * rnd(0.9, 1.1));
-    offer = Math.round((floor * rnd(1.28, 1.48)) / 1000) * 1000;
+    // Мы покупаем метрику (доля студии для нас = минимальная): их floor — максимум их требований; оффер сверху
+    floor = scen.oppFloor * rnd(0.92, 1.08);
+    offer = scen.oppFloor * rnd(1.15, 1.35);
   }
-  session = { z, scen, deal: d, floor, offer, round: 0, nudges: 0, mine: [], msg: [], over: false, ultimatum: false, closed: null, acceptedUltimatum: false, ai: (location.protocol === 'https:' || !!getAiKey()) };
+  floor = isPct ? Math.round(floor) : (isMln ? Math.round(floor * 10) / 10 : Math.round(floor / 1000) * 1000);
+  offer = isPct ? Math.round(offer) : (isMln ? Math.round(offer * 10) / 10 : Math.round(offer / 1000) * 1000);
+  session = { z, scen, deal: d, floor, offer, round: 0, nudges: 0, mine: [], msg: [], over: false, ultimatum: false, closed: null, acceptedUltimatum: false, ai: (location.protocol === 'https:' || !!getAiKey()), score: 0, streak: 0, badges: [], log: [] };
   renderSession();
-  const opening = 'Слушайте, давайте к делу. Что у вас по деньгам? Только честно — у меня ещё три поставщика в работе.';
-  const openingBuy = 'Вы нам в целом подходите. Но бюджет в этом году урезали. Начните с вашей лучшей цены — и без долгих прелюдий.';
+  const opening = scen.open || 'Слушайте, давайте к делу. Что у вас по цифрам?';
   if (session.ai) {
-    aiSpeak(session, { system: aiOpeningPrompt(session) }, z.sell ? opening : openingBuy);
+    aiSpeak(session, { system: aiOpeningPrompt(session) }, opening);
   } else {
-    pushThem(z.sell ? opening : openingBuy);
+    pushThem(opening);
     pushSys('Раунд 1. Лимит контрагента скрыт. Ваш ход — назовите цифру (или условия) или завершите и получите разбор.');
   }
 }
@@ -515,6 +563,7 @@ function renderSession() {
   if (!box) return;
   if (!$id('chat')) {
     box.innerHTML = `<div class="card">
+      <div id="hud" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;font-size:14px"><span>🎯 Очки: <strong id="hud-score">0</strong></span><span>🔥 Серия: <strong id="hud-streak">0</strong></span><span class="fine" id="hud-goal">${esc(session.deal.main.name || '')}</span></div>
       <div id="chat" aria-live="polite"></div>
       <div class="chat-input" style="margin-top:12px">
         <input type="text" id="chat-in" placeholder="Ваш ход: цифра или условия…" autocomplete="off">
@@ -528,6 +577,8 @@ function renderSession() {
     $id('chat-in').onkeydown = (e) => { if (e.key === 'Enter') onUser(); };
     $id('d-end').onclick = () => endSession('Разбор по вашему запросу.');
   }
+  const hs = $id('hud-score'); if (hs) hs.textContent = String(session.score || 0);
+  const hb = $id('hud-streak'); if (hb) hb.textContent = String(session.streak || 0);
   const chat = $id('chat');
   if (chat._r !== session.msg.length) {
     chat._r = session.msg.length;
@@ -551,14 +602,21 @@ function onUser() {
   inp.value = '';
   pushWho('me', text);
   let num = parseNum(text);
-  // «640», «ладно, 500» в контексте торга о крупной сделке — тысячи, а не рубли.
-  // Если цифра крошечная относительно текущих ставок в партии — умножаем на 1000.
-  if (num != null && num > 0 && num < 10000) {
-    const rates = [session.offer, ...session.mine.map(x => parseNum(x))].filter(x => x != null && x >= 10000);
-    const ref = rates.length ? Math.max(...rates) : null;
-    if (ref && num * 1000 >= ref * 0.03) num = num * 1000;
+  // Масштабирование под юнит кейса: % (ставки 10–70), млн ₽ (ставки 5–20), рубли (×1000-эвристика)
+  const unit = session.scen && session.scen.unit;
+  if (num != null && num > 0) {
+    if (session.scen && session.scen.unit === 'млн ₽') {
+      if (num >= 1e6) num = Math.round(num / 1e6 * 10) / 10; // «12 млн» → 12
+    } else if (session.scen && session.scen.unit === '%') {
+      if (num > 100) num = num / 1000; // «35000» из-за ×1000-эвристики? маловероятно, но страховка
+    } else if (num > 0 && num < 10000) {
+      const rates = [session.offer, ...session.mine.map(x => parseNum(x))].filter(x => x != null && x >= 10000);
+      const ref = rates.length ? Math.max(...rates) : null;
+      if (ref && num * 1000 >= ref * 0.03) num = num * 1000;
+    }
   }
   session.mine.push(text);
+  analyzeMove(text, num);
 
   if (session.ultimatum) {
     const z = session.z;
@@ -567,9 +625,9 @@ function onUser() {
       const okForThem = z.sell ? num <= session.floor : num >= session.floor;
       if (okForThem) { session.closed = num; endSession(); return; }
       session.ultRefusals = (session.ultRefusals || 0) + 1;
-      if (session.ultRefusals >= 3) { endSession(`Разошлись: их финал — ${fmt(session.offer)}, ваша последняя цифра — ${fmt(num)}.`); return; }
-      aiSpeak(session, { system: `Сводка для твоей реплики: собеседник снова не принял твой оффер ${fmt(session.offer)}. Повтори его жёстче, без новых цифр.` }, 'Цифры мы уже назвали. Наша — ' + fmt(session.offer) + '. Или берёте, или расходимся.');
-      setTimeout(() => aiCoach(session, text, 'пользователь отказался от их финального оффера, сузил до ' + fmt(num)), 4200);
+      if (session.ultRefusals >= 3) { endSession(`Разошлись: их финал — ${fmtU(session.offer, session.scen)}, ваша последняя цифра — ${fmtU(num, session.scen)}.`); return; }
+      aiSpeak(session, { system: `Сводка для твоей реплики: собеседник снова не принял твой оффер ${fmtU(session.offer, session.scen)}. Повтори его жёстче, без новых цифр.` }, 'Цифры мы уже назвали. Наша — ' + fmtU(session.offer, session.scen) + '. Или берёте, или расходимся.');
+      setTimeout(() => aiCoach(session, text, 'пользователь отказался от их финального оффера, сузил до ' + fmtU(num, session.scen)), 4200);
       return;
     }
     else { aiSpeak(session, { system: 'Пользователь уклончив, цифры нет. Потребуйте цифру прямо.' }, 'Да или нет. Называйте цифру, если не согласны.'); return; }
@@ -588,10 +646,11 @@ async function resolveNum(num, userText) {
   const z = session.z, d = session.deal;
   const r = Number(d.main.reserve);
   const userText2 = userText || String(num);
-  // Проверка на движение против себя
+  // Проверка на движение против себя: сработает ТОЛЬКО если контрагент не двигался с вашей последней цифры
   const nums = session.mine.map(parseNum).filter((x) => x != null);
   const prev = nums.length >= 2 ? nums[nums.length - 2] : null;
-  const selfDefeat = prev != null && (z.sell ? num < prev : num > prev);
+  const selfDefeat = prev != null && (z.sell ? num < prev : num > prev) && !session.themMovedSinceMine;
+  session.themMovedSinceMine = false;
   if (selfDefeat) pushSys('⚠️ Вы улучшили предложение сами себе — «торг против себя». Уступайте только в обмен на их движение.');
 
   // Принятие: их floor достигнут?
@@ -600,8 +659,8 @@ async function resolveNum(num, userText) {
   if (okForThem && (session.round >= 1 || nearFloor)) {
     session.closed = num;
     if (session.ai) {
-      aiSpeak(session, { system: `Сводка для твоей реплики: собеседник предложил ${fmt(num)} — тебя это устраивает. Соглашайся и фиксируй договорённость.` }, tone(session.scen, 'accept', num, 0));
-      setTimeout(() => aiCoach(session, userText2, 'предложил ' + fmt(num) + ' — контрагент принимает'), 4200);
+      aiSpeak(session, { system: `Сводка для твоей реплики: собеседник предложил ${fmtU(num, session.scen)} — тебя это устраивает. Соглашайся и фиксируй договорённость.` }, tone(session.scen, 'accept', num, 0));
+      setTimeout(() => aiCoach(session, userText2, 'предложил ' + fmtU(num, session.scen) + ' — контрагент принимает'), 4200);
       setTimeout(endSession, 3200);
     } else {
       pushThem(tone(session.scen, 'accept', num, 0));
@@ -616,7 +675,7 @@ async function resolveNum(num, userText) {
     session.ultimatum = true;
     const sysLine = 'Это их финальная цифра. Ответьте «да» — принять, или назовите свою. «Завершить» — разбор без сделки.';
     if (session.ai) {
-      aiSpeak(session, { system: `Сводка для твоей реплики: это твой предел. Назови ${fmt(session.floor)} как окончательную цену и дай понять, что дальше — только прощание.` }, tone(session.scen, 'ultimatum', session.floor));
+      aiSpeak(session, { system: `Сводка для твоей реплики: это твой предел. Назови ${fmtU(session.floor, session.scen)} как окончательную цену и дай понять, что дальше — только прощание.` }, tone(session.scen, 'ultimatum', session.floor));
       setTimeout(() => pushSys('Это их финальная цифра. «Да» — принять, назовите свою — продолжить, «Завершить» — разбор.'), 900);
     } else {
       pushThem(tone(session.scen, 'ultimatum', session.floor));
@@ -626,17 +685,79 @@ async function resolveNum(num, userText) {
   }
   // Их уступка в сторону floor
   const step = Math.max(minStepVal(session.floor), Math.abs(session.floor - session.offer) * (session.scen.stepPct || 0.4));
-  session.offer = z.sell
+  let nextOffer = z.sell
     ? Math.min(session.floor, session.offer + step)
     : Math.max(session.floor, session.offer - step);
+  // Округление в единицах кейса: % → целое, млн ₽ → 0.1, ₽ → тысячи
+  const _u = session.scen && session.scen.unit;
+  nextOffer = _u === '%' ? Math.round(nextOffer) : (_u === 'млн ₽' ? Math.round(nextOffer * 10) / 10 : Math.round(nextOffer / 500) * 500);
+  session.offer = nextOffer;
+  session.themMovedSinceMine = true;
   const directive = selfDefeat
-    ? { system: `Сводка ситуации для твоего хода: собеседник только что предложил ${fmt(num)} — сам, без твоего движения. Ты пока не двигаешься к своей цели, отвечай с давлением и без новых цифр.`, fallbackText: tone(session.scen, 'hold', session.offer) }
-    : { system: `Сводка для твоей реплики: ты называешь ${fmt(session.offer)}. Добей собеседника и потребуй встречного движения.`, fallbackText: tone(session.scen, 'concede', session.offer) };
+    ? { system: `Сводка ситуации для твоего хода: собеседник только что предложил ${fmtU(num, session.scen)} — сам, без твоего движения. Ты пока не двигаешься к своей цели, отвечай с давлением и без новых цифр.`, fallbackText: tone(session.scen, 'hold', session.offer) }
+    : { system: `Сводка для твоей реплики: ты называешь ${fmtU(session.offer, session.scen)}. Добей собеседника и потребуй встречного движения.`, fallbackText: tone(session.scen, 'concede', session.offer) };
   aiSpeak(session, directive, directive.fallbackText);
   setTimeout(() => aiCoach(session, userText2, selfDefeat ? 'торг против себя: уступка без встречного движения контрагента' : 'обычная уступка'), 4200);
 }
 
-function minStepVal(floor) { return Math.max(500, Math.round(Math.abs(floor) * 0.02)); }
+function minStepVal(floor) {
+  const u = session && session.scen && session.scen.unit;
+  if (u === '%') return 1;
+  if (u === 'млн ₽') return 0.2;
+  return Math.max(500, Math.round(Math.abs(floor) * 0.02));
+}
+
+/* ---------------- геймификация ---------------- */
+const GAME_KEY = 'zopa_game_v1';
+function loadGame() {
+  try { return JSON.parse(localStorage.getItem(GAME_KEY) || 'null') || { total: 0, best: 0, played: 0, wins: 0, badges: [] }; }
+  catch (e) { return { total: 0, best: 0, played: 0, wins: 0, badges: [] }; }
+}
+function saveGame(g) { try { localStorage.setItem(GAME_KEY, JSON.stringify(g)); } catch (e) {} }
+function award(pts, why) {
+  if (!session) return;
+  session.score += pts;
+  if (pts > 0) { session.streak++; pushSys(`🏆 +${pts} очков — ${why}${session.streak >= 2 ? ` (серия ×${session.streak})` : ''}`); }
+  else { session.streak = 0; pushSys(`⚠️ ${pts} очков — ${why}`); }
+}
+function badge(name) {
+  if (!session || session.badges.includes(name)) return;
+  session.badges.push(name);
+  pushSys(`🎖 Ачивка: «${name}»`);
+}
+// Проверки реплик на переговорные красные флаги (штрафы) и сильные ходы (награды)
+function analyzeMove(text, num) {
+  const t = String(text).toLowerCase();
+  // Штрафы
+  if (/(мне бы хоть|согласен бы на|готов (уступить|отдать)|минимум, который|меня устроит хотя бы)/.test(t)) {
+    award(-15, 'вы раскрыли свою нижнюю границу — назовёшь минимум, получишь только его');
+  }
+  if (/(просто|ну ладно|давайте скорее|нам срочно (нужны|нужны) деньги|мы без этого (пропадём|умрём))/.test(t)) {
+    award(-10, 'слишком просительная позиция: отчаяние снижает цену сделки');
+  }
+  if (/(гарантия возврата|верните деньги|гарантированный доход)/.test(t) && session.scen.id === 'angel') {
+    award(-10, 'пообещали гарантии доходности — в играх их не бывает, красный флаг для юристов');
+  }
+  if (/(?<!не\s)(отдаю|отда[лмт]|отдам|забирайте|забирай)\s+(бы\s+)?(всё|все)?\s*(ip|права|ип)/.test(t)) {
+    award(-20, 'вы отдаёте IP — главный актив студии, самое дорогое слово в геймдеве');
+    badge('Козёл отпущения');
+  }
+  // Награды
+  if (/(взамен|в обмен|при условии|тогда)/.test(t)) {
+    award(10, 'условная уступка «если… то…» — правильный торг, а не дарение');
+  }
+  if (/(батна|batna|альтернатива|другой (издатель|фонд|команда)|конкурирующ)/.test(t)) {
+    award(12, 'ссылка на альтернативу (BATNA) усиливает позицию');
+    badge('Переговорщик с запасным аэродромом');
+  }
+  if (/(вехи|этапы|транш|milestone)/.test(t)) {
+    award(10, 'поэтапность (транши/вехи) снижает риски обеих сторон');
+    badge('Архитектор пирога');
+  }
+  if (/(вопрос|сколько|какой бюджет|какие сроки|почему)/.test(t) && num == null) {
+    award(5, 'вопрос вместо голой цифры — разведка до раскрытия');
+  }
+}
 
 function endSession(reason) {
   if (!session || session.over) return;
@@ -650,8 +771,8 @@ function endSession(reason) {
     const share = realZone > 0 ? Math.min(999, Math.round((mine / realZone) * 100)) : 0;
     const below = z.sell ? P < Number(d.main.reserve) : P > Number(d.main.reserve);
     // Для продавца: чем выше P, тем лучше. share>100 = закрыли выше своей цели/резерва-математики
-    html += `<h2>Сделка закрыта на ${fmt(P)}</h2>`;
-    html += `<p>Скрытый лимит контрагента: <strong>${fmt(session.floor)}</strong> (ваша оценка была ${fmt(Number(d.opp.limit))}).</p>`;
+    html += `<h2>Сделка закрыта на ${fmtU(P, session.scen)}</h2>`;
+    html += `<p>Скрытый лимит контрагента: <strong>${fmtU(session.floor, session.scen)}</strong> (ваша оценка была ${fmtU(Number(d.opp.limit), session.scen)}).</p>`;
     if (below) {
       html += `<p style="color:#f87171"><strong>Красный флаг: сделка хуже вашего резерва.</strong> Так вы продаёте себя ниже BATNA. Стоп-линия должна была сработать — в реальных переговорах это самое дорогое место.</p>`;
     } else if (share > 100) {
@@ -661,10 +782,43 @@ function endSession(reason) {
     }
   } else {
     html += `<h3>Сделки нет</h3>
-    <p>Реальный лимит контрагента: <strong>${fmt(session.floor)}</strong>. Ваш резерв: <strong>${fmt(Number(d.main.reserve))}</strong>. ${z.exists ? 'Зона существовала — разошлись из-за тактики: слишком медленно сходились или слишком жёстко держали цифру.' : 'Зоны реально не было — как в вашей подготовке (negative ZOPA).'}</p>`;
+    <p>Реальный лимит контрагента: <strong>${fmtU(session.floor, session.scen)}</strong>. Ваш резерв: <strong>${fmtU(Number(d.main.reserve), session.scen)}</strong>. ${z.exists ? 'Зона существовала — разошлись из-за тактики: слишком медленно сходились или слишком жёстко держали цифру.' : 'Зоны реально не было — как в вашей подготовке (negative ZOPA).'}</p>`;
   }
   if (reason) html += `<p class="fine">${esc(reason)}</p>`;
-  const nums = session.mine.map(parseNum).filter((x) => x != null);
+  /* ---- Итоговые очки партии ---- */
+  {
+    const g = loadGame();
+    let dealPts = 0;
+    if (P != null) {
+      const realZone = Math.abs(session.floor - Number(d.main.reserve));
+      const mine = Math.abs(P - Number(d.main.reserve));
+      const share = realZone > 0 ? (mine / realZone) * 100 : 0;
+      const below = z.sell ? P < Number(d.main.reserve) : P > Number(d.main.reserve);
+      if (below) dealPts = 0;                       // сделка хуже резерва — очков за цифру нет
+      else dealPts = Math.round(Math.min(200, Math.max(20, share)));
+      session.score += dealPts;
+      g.wins += below ? 0 : 1;
+    } else {
+      // Сделки нет: если зоны реально не было (negative ZOPA) — умный выход даёт 40 очков
+      dealPts = z.exists ? 0 : 40;
+      session.score += dealPts;
+    }
+    g.total += session.score;
+    g.played += 1;
+    if (session.score > g.best) g.best = session.score;
+    const newBadges = (session.badges || []).filter((b) => !g.badges.includes(b));
+    g.badges = g.badges.concat(newBadges);
+    saveGame(g);
+    const grade = session.score >= 250 ? 'S — Мастер сделки' : session.score >= 160 ? 'A — Крепкий торг' : session.score >= 80 ? 'B — Есть рост' : 'C — Урок на будущее';
+    html += `<h3>🏆 Результат партии: ${session.score} очков — ранг «${grade}»</h3>
+    <p class="fine">Сделка: ${dealPts} · тактические ходы: ${session.score - dealPts}. Всего очков у вас: <strong>${g.total}</strong>, лучший результат: <strong>${g.best}</strong>, партий сыграно: ${g.played}.</p>
+    ${newBadges.length ? `<p>🎖 Новые ачивки: ${newBadges.map((b) => '«' + b + '»').join(', ')}</p>` : ''}
+    ${g.badges.length ? `<p class="fine">Все ачивки (${g.badges.length}): ${g.badges.map((b) => '«' + b + '»').join(' · ')}</p>` : ''}`;
+  }
+  const numsRaw = session.mine.map(parseNum).filter((x) => x != null);
+  // Приводим к единицам кейса: в % / млн-кейсах parseNum даёт ×1000 (эвристика тысяч) — делим обратно
+  const _uu = session.scen && session.scen.unit;
+  const nums = numsRaw.map((v) => (_uu === '%' && v > 100 ? Math.round(v / 1000) : (_uu === 'млн ₽' && v >= 1e6 ? Math.round(v / 1e6 * 10) / 10 : v)));
   if (nums.length >= 3) {
     const steps = [];
     for (let i = 1; i < nums.length; i++) steps.push(Math.abs(nums[i] - nums[i - 1]));
@@ -675,7 +829,8 @@ function endSession(reason) {
     html += `<h3>Манера контрагента (для будущих раундов)</h3><ul class="clean">${session.scen.tells.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`;
   }
   html += `<div style="margin-top:14px"><button class="btn" id="d-again">Ещё раунд</button> <button class="btn ghost" id="d-home">Сменить контрагента</button></div></div>`;
-  $id('drill-root').innerHTML = html;
+  $id('drill-root').innerHTML = '<div id="drill-live"></div>';
+  $id('drill-live').innerHTML = html;
   $id('d-again').onclick = () => startSession(session.scen, session.deal);
   $id('d-home').onclick = () => initDrill();
   if (session.ai) aiDebriefFill(session);
@@ -694,7 +849,7 @@ async function aiDebriefFill(session) {
     ? Math.round(100 - Math.abs(session.closed - session.floor) / Math.max(session.floor, 1) * 100)
     : 0;
   const base = session.closed != null
-    ? 'Итог: ' + fmt(session.closed) + ' — ' + (redFlag ? 'СДЕЛКА ХУЖЕ ВАШЕГО РЕЗЕРВА, надо было встать и уйти' : (delta > 60 ? 'вы забрали львиную долю зоны' : 'зона поделена почти пополам')) +
+    ? 'Итог: ' + fmtU(session.closed, session.scen) + ' — ' + (redFlag ? 'СДЕЛКА ХУЖЕ ВАШЕГО РЕЗЕРВА, надо было встать и уйти' : (delta > 60 ? 'вы забрали львиную долю зоны' : 'зона поделена почти пополам')) +
       '. ' + (session.mine.length >= 2 ? 'Уступки: ' + session.mine.map(parseNum).filter(x => x != null).join(' → ') + '. ' : '') +
       'Совет: уступка только в обмен на их шаг, зону нащупывайте вопросами о бюджете.'
     : 'Сделки нет: зоны не нашлось. Совет: расширяйте пир — сроки, объём, гарантии, состав предметов торга.';
@@ -703,7 +858,7 @@ async function aiDebriefFill(session) {
     'Оживи черновик разбора партии: сохрани факты и советы, скажи живее, 3 коротких пункта через «;», до 400 знаков.'
   ].join('\n');
   try {
-    const facts = 'Итог: ' + (session.closed != null ? fmt(session.closed) : 'сделки нет') + '. Ходы пользователя: ' + ((session.mine || []).slice(0, 6).join(' | ') || 'цифр не было') + '.';
+    const facts = 'Итог: ' + (session.closed != null ? fmtU(session.closed, session.scen) : 'сделки нет') + '. Ходы пользователя: ' + ((session.mine || []).slice(0, 6).join(' | ') || 'цифр не было') + '.';
     let t = '';
     try { t = await aiChat([{ role: 'user', content: base + ' ||| Факты: ' + facts }], 768, 'debrief'); } catch (e) {}
     if (t && t.length >= 10 && isMostlyRussian(t)) {
