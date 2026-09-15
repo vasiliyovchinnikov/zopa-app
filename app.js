@@ -702,16 +702,26 @@ async function aiDebriefFill(session) {
     'Оживи черновик разбора партии: сохрани факты и советы, скажи живее, 3 коротких пункта через «;», до 400 знаков.'
   ].join('\n');
   try {
-    let t = await aiChat([
-      { role: 'system', content: sys },
-      { role: 'user', content: 'Черновик разбора: «' + base + '»\nФакты: ходы пользователя: ' + ((session.mine || []).slice(0, 6).join(' | ') || 'цифр не было') + '. Оживи по-русски.' }
-    ], 768);
-    if (!isMostlyRussian(t)) {
-      const fix = await aiChat([{ role: 'system', content: sys }, { role: 'user', content: 'Черновик: «' + base + '». Разбор по-русски, без рассуждений:' }], 768);
-      if (isMostlyRussian(fix)) t = fix;
+    window.__gwOp = 'debrief';
+    const facts = 'Итог: ' + (session.closed != null ? fmt(session.closed) : 'сделки нет') + '. Ходы пользователя: ' + ((session.mine || []).slice(0, 6).join(' | ') || 'цифр не было') + '.';
+    let t = '';
+    try { t = await aiChat([{ role: 'user', content: base + ' ||| Факты: ' + facts }], 768); } catch (e) {}
+    if (isMostlyRussian(t)) {
+      holder.innerHTML = '<span class="badge">ИИ-разбор</span><p style="color:var(--txt)">' + esc(t) + '</p>';
+      return;
+    }
+    // фолбэк: BYO напрямую или скелет
+    if (getAiKey()) {
+      try {
+        const fix = await aiChatDirect([
+          { role: 'system', content: sys },
+          { role: 'user', content: 'Черновик разбора: «' + base + '»\nФакты: ходы пользователя: ' + ((session.mine || []).slice(0, 6).join(' | ') || 'цифр не было') + '. Оживи по-русски.' }
+        ], 768);
+        if (isMostlyRussian(fix)) t = fix;
+      } catch (e) {}
     }
     if (isMostlyRussian(t)) holder.innerHTML = '<span class="badge">ИИ-разбор</span><p style="color:var(--txt)">' + esc(t) + '</p>';
-    else holder.remove();
+    else holder.innerHTML = '<span class="badge">ИИ-разбор</span><p style="color:var(--txt)">' + esc(base) + '</p>';
   } catch (e) {
     holder.innerHTML = '<span class="badge">ИИ-разбор</span><p style="color:var(--txt)">' + esc(base) + '</p>';
   }
@@ -799,15 +809,43 @@ function toast(txt) {
   setTimeout(() => d.remove(), 2200);
 }
 
-/* ---------------- ИИ-слой (Infereco / OpenAI-совместимый) ---------------- */
+/* ---------------- ИИ-слой (шлюз ludatsoy.ru/llm.php + прямой Infereco по желанию) ---------------- */
 const AI_KEY_STORAGE = 'zopa_ai_key_v1';
 const AI_URL = 'https://api.infereco.ru/v1/chat/completions';
 const AI_MODEL = 'glm/glm-5.3-flash';
+// Шлюз: ключи на сервере (reg.ru), лимиты по IP, промпты собирает сервер.
+const GW_URL = 'https://ludatsoy.ru/llm.php';
+const GW_TOKEN = 'zopa-gw-v1'; // публичный маркер доступа к шлюзу (защита: лимиты по IP на сервере)
 
 function getAiKey() { return localStorage.getItem(AI_KEY_STORAGE) || ''; }
 function setAiKey(k) { k = (k || '').trim(); if (k) localStorage.setItem(AI_KEY_STORAGE, k); else localStorage.removeItem(AI_KEY_STORAGE); }
 
 async function aiChat(messages, maxTokens) {
+  // Приоритет 1: серверный шлюз (ключ не нужен, лимиты на стороне шлюза)
+  if (location.protocol === 'https:') {
+    try {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 50000);
+      try {
+        const res = await fetch(GW_URL + '?op=' + (window.__gwOp || 'speak'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-GW-Token': GW_TOKEN },
+          body: JSON.stringify({ messages }),
+          signal: ctrl.signal
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.ok && data.text) return data.text;
+        }
+      } finally { clearTimeout(to); }
+    } catch (e) { /* шлюз молчит — пробуем прямой путь */ }
+  }
+  // Приоритет 2: BYO-ключ напрямую в Infereco
+  return aiChatDirect(messages, maxTokens);
+}
+
+// Прямой вызов Infereco (BYO-ключ), мимо шлюза
+async function aiChatDirect(messages, maxTokens) {
   const key = getAiKey();
   if (!key) throw new Error('no-key');
   const call = async () => {
@@ -823,9 +861,9 @@ async function aiChat(messages, maxTokens) {
       if (!res.ok) throw new Error('http-' + res.status);
       const data = await res.json();
       const m = data && data.choices && data.choices[0] && data.choices[0].message || {};
-      // GLM может вернуть <think>…</think> внутри content — срезаем
-      const raw = (m.content || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
-        || (m.reasoning_content || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      // GLM-5.3-flash — reasoning-модель: срезаем  LICHEE тег если придёт
+      const raw = (m.content || '').replace(new RegExp("<think>[\\s\\S]*?</think>", 'gi'), '').trim()
+        || (m.reasoning_content || '').trim();
       return raw;
     } finally { clearTimeout(to); }
   };
@@ -883,23 +921,23 @@ async function aiSpeak(session, directive, fallbackText) {
     const history = session.msg.filter(m => m.who === 'me' || m.who === 'them').slice(-8).map(m => ({ role: m.who === 'me' ? 'user' : 'assistant', content: m.text }));
     // Скелет реплики всегда от движка (fallbackText содержит нужную цифру и вектор),
     // LLM только оживляет формулировку. Любой сбой → заготовка. Игра не ломается никогда.
-    const seedRep = 'Пока ваши цифры выше наших заявок. Хочу услышать вас.';
     const base = fallbackText || '';
-    const msgs = [
-      { role: 'system', content: aiSystemPrompt(session, '') },
-      { role: 'user', content: '(начало переговоров)' },
-      { role: 'assistant', content: seedRep },
-      ...history,
-      { role: 'user', content: 'Черновик твоей реплики: «' + base + '»\nОживи её в своем характере: сохрани цифры и смысл, говори живее, 1–3 предложения. Только реплика по-русски.' }
-    ];
-    let rep = await aiChat(msgs, 768);
-    if (!okRep(rep)) {
-      const fix = await aiChat([
-        { role: 'system', content: aiSystemPrompt(session, '') },
-        ...history,
-        { role: 'user', content: 'Черновик: «' + base + '»\nПредыдущая попытка была рассуждением вместо игры. Дай только реплику персонажа по-русски.' }
-      ], 768);
-      if (okRep(fix)) rep = fix; else rep = base;
+    window.__gwOp = 'speak';
+    let rep = '';
+    try { rep = await aiChat([{ role: 'user', content: base }], 768); } catch (e) {}
+    if (!okRep(rep) && getAiKey()) {
+      // ретрай напрямую через BYO-ключ (мимо шлюза)
+      const history = session.msg.filter(m => m.who === 'me' || m.who === 'them').slice(-8).map(m => ({ role: m.who === 'me' ? 'user' : 'assistant', content: m.text }));
+      const seedRep = 'Пока ваши цифры выше наших заявок. Хочу услышать вас.';
+      try {
+        rep = await aiChatDirect([
+          { role: 'system', content: aiSystemPrompt(session, '') },
+          { role: 'user', content: '(начало переговоров)' },
+          { role: 'assistant', content: seedRep },
+          ...history,
+          { role: 'user', content: 'Черновик твоей реплики: «' + base + '»\nОживи её в своем характере: сохрани цифры и смысл, говори живее, 1–3 предложения. Только реплика по-русски.' }
+        ], 768);
+      } catch (e) { rep = ''; }
     }
     if (!okRep(rep)) rep = base;
     if (rep.length > 420) rep = rep.slice(0, 417).trim() + '…';
@@ -908,7 +946,7 @@ async function aiSpeak(session, directive, fallbackText) {
   } catch (e) {
     typing.remove();
     pushThem(fallbackText);
-    pushSys('ИИ недоступен (' + e.message + ') — отвечаю заготовками. Проверьте ключ в настройках.');
+    pushSys('ИИ недоступен (' + e.message + ') — отвечаю заготовками.');
   }
 }
 
@@ -920,27 +958,29 @@ function okRep(t) {
 }
 
 async function aiCoach(session, userText, engineNote) {
-  if (!getAiKey()) return;
+  if (!getAiKey() && location.protocol !== 'https:') return;
   const z = session.z;
-  const sys = [
-    'Ты — русский коуч по переговорам (канон Raiffa / Harvard PON / Voss). Отвечай ТОЛЬКО по-русски.',
-    'Оцени ход пользователя одной фразой (до 140 знаков): что сделал + что по канону (якорь, Ackerman, торг против себя, раскрытие резерва, вопросы вместо уступок).',
-    'Пример тона: «Якорь поставлен агрессивно, но с обоснованием — по канону. Дальше не уступайте без встречного движения.»',
-    'Вывод = ТОЛЬКО одна фраза оценки по-русски. Не пересказывайте ход, не объясняйте задание, не пишите по-английски, не используйте слово «user».',
-    'Без похвалы ради похвалы; слабый ход — прямо и с исправлением. Без списков и markdown. Никакого английского.',
-    `Роль пользователя: ${z.sell ? 'продавец' : 'покупатель'}. Его резерв и цель системе известны, тебе — нет (не спрашивай).`,
-    'Заметка о ходе: ' + (engineNote || 'обычный ход.')
-  ].join('\n');
+  const note = engineNote || 'обычный ход.';
+  window.__gwOp = 'coach';
   try {
-    const c = await aiChat([{ role: 'system', content: sys }, { role: 'user', content: 'Ход пользователя: «' + userText + '». Оцени.' }], 768);
-    // Если модель ушла в английский/пересказ — последний шанс: просим русскую оценку
-    if (isMostlyRussian(c) && !/[a-zA-Z]{4,}/.test(c)) pushWho('coach', c);
-    else {
-      const fix = await aiChat([
-        { role: 'system', content: sys + '\nПРЕДЫДУЩАЯ ПОПЫТКА БЫЛА НЕ ПО ФОРМАТУ (английский/пересказ). Ответ — только одна фраза оценки по-русски, не пересказ хода.' },
-        { role: 'user', content: 'Ход: «' + userText + '». Оценка по-русски, одна фраза:' }
-      ], 768);
-      if (isMostlyRussian(fix) && !/[a-zA-Z]{4,}/.test(fix)) pushWho('coach', fix);
+    let c = '';
+    try { c = await aiChat([{ role: 'user', content: 'Ход: «' + userText + '». Заметка: ' + note + '.' }], 768); } catch (e) {}
+    if (isMostlyRussian(c) && !/[a-zA-Z]{4,}/.test(c)) { pushWho('coach', c); return; }
+    if (getAiKey()) {
+      // ретрай напрямую (BYO)
+      const sys = [
+        'Ты — русский коуч по переговорам (канон Raiffa / Harvard PON / Voss). Отвечай ТОЛЬКО по-русски.',
+        'Оцени ход пользователя одной фразой (до 140 знаков): что сделал + что по канону (якорь, Ackerman, торг против себя, раскрытие резерва, вопросы вместо уступок).',
+        'Пример тона: «Якорь поставлен агрессивно, но с обоснованием — по канону. Дальше не уступайте без встречного движения.»',
+        'Вывод = ТОЛЬКО одна фраза оценки по-русски. Не пересказывайте ход, не объясняйте задание, не пишите по-английски, не используйте слово «user».',
+        'Без похвалы ради похвалы; слабый ход — прямо и с исправлением. Без списков и markdown. Никакого английского.',
+        `Роль пользователя: ${z.sell ? 'продавец' : 'покупатель'}. Его резерв и цель системе известны, тебе — нет (не спрашивай).`,
+        'Заметка о ходе: ' + note
+      ].join('\n');
+      try {
+        const fix = await aiChatDirect([{ role: 'system', content: sys }, { role: 'user', content: 'Ход пользователя: «' + userText + '». Оценка по-русски, одна фраза:' }], 768);
+        if (isMostlyRussian(fix) && !/[a-zA-Z]{4,}/.test(fix)) pushWho('coach', fix);
+      } catch (e) {}
     }
   } catch (e) { /* коуч не критичен */ }
 }
@@ -949,12 +989,12 @@ function aiSettingsHtml() {
   const has = !!getAiKey();
   return `<div class="card">
     <span class="badge">ИИ-спарринг</span>
-    <h3>${has ? '🤖 ИИ-контрагент включён' : '∘ ИИ-контрагент: подключить'}</h3>
-    <p class="fine">${has ? 'Реплики пишет языковая модель (Infereco). Ключ хранится только в вашем браузере. Ключ можно сменить или отключить.' : 'Без ключа играет заготовленный бот (полностью рабочий). С ключом — живые реплики и коуч после каждого хода. Ключ API (Infereco или любой OpenAI-совместимый) хранится только в вашем браузере.'}</p>
+    <h3>🤖 ИИ-контрагент: включён для всех</h3>
+    <p class="fine">Реплики, коуч и разбор пишет языковая модель через серверный шлюз — ключ вводить не нужно. Хотите свой ключ (Infereco или любой OpenAI-совместимый)? Вставьте ниже — он хранится только в вашем браузере и будет использоваться напрямую.</p>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-      <input type="password" id="ai-key-in" placeholder="Ключ API (sk-…)" style="flex:1;min-width:200px;background:#0d1320;border:1px solid var(--line);color:var(--txt);font:inherit;padding:11px 13px;border-radius:11px" value="${has ? '••••••••' : ''}">
-      <button class="btn ghost" id="ai-save">${has ? 'Сменить' : 'Подключить'}</button>
-      ${has ? '<button class="btn ghost" id="ai-off">Отключить</button>' : ''}
+      <input type="password" id="ai-key-in" placeholder="Свой ключ API (необязательно)" style="flex:1;min-width:200px;background:#0d1320;border:1px solid var(--line);color:var(--txt);font:inherit;padding:11px 13px;border-radius:11px" value="${has ? '••••••••' : ''}">
+      <button class="btn ghost" id="ai-save">${has ? 'Сменить' : 'Подключить свой ключ'}</button>
+      ${has ? '<button class="btn ghost" id="ai-off">Отключить свой ключ</button>' : ''}
     </div>
   </div>`;
 }
