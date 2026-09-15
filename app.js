@@ -702,10 +702,9 @@ async function aiDebriefFill(session) {
     'Оживи черновик разбора партии: сохрани факты и советы, скажи живее, 3 коротких пункта через «;», до 400 знаков.'
   ].join('\n');
   try {
-    window.__gwOp = 'debrief';
     const facts = 'Итог: ' + (session.closed != null ? fmt(session.closed) : 'сделки нет') + '. Ходы пользователя: ' + ((session.mine || []).slice(0, 6).join(' | ') || 'цифр не было') + '.';
     let t = '';
-    try { t = await aiChat([{ role: 'user', content: base + ' ||| Факты: ' + facts }], 768); } catch (e) {}
+    try { t = await aiChat([{ role: 'user', content: base + ' ||| Факты: ' + facts }], 768, 'debrief'); } catch (e) {}
     if (isMostlyRussian(t)) {
       holder.innerHTML = '<span class="badge">ИИ-разбор</span><p style="color:var(--txt)">' + esc(t) + '</p>';
       return;
@@ -820,14 +819,14 @@ const GW_TOKEN = 'zopa-gw-v1'; // публичный маркер доступа
 function getAiKey() { return localStorage.getItem(AI_KEY_STORAGE) || ''; }
 function setAiKey(k) { k = (k || '').trim(); if (k) localStorage.setItem(AI_KEY_STORAGE, k); else localStorage.removeItem(AI_KEY_STORAGE); }
 
-async function aiChat(messages, maxTokens) {
+async function aiChat(messages, maxTokens, gwOp) {
   // Приоритет 1: серверный шлюз (ключ не нужен, лимиты на стороне шлюза)
   if (location.protocol === 'https:') {
     try {
       const ctrl = new AbortController();
       const to = setTimeout(() => ctrl.abort(), 50000);
       try {
-        const res = await fetch(GW_URL + '?op=' + (window.__gwOp || 'speak'), {
+        const res = await fetch(GW_URL + '?op=' + (gwOp || 'speak'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-GW-Token': GW_TOKEN },
           body: JSON.stringify({ messages }),
@@ -922,9 +921,8 @@ async function aiSpeak(session, directive, fallbackText) {
     // Скелет реплики всегда от движка (fallbackText содержит нужную цифру и вектор),
     // LLM только оживляет формулировку. Любой сбой → заготовка. Игра не ломается никогда.
     const base = fallbackText || '';
-    window.__gwOp = 'speak';
     let rep = '';
-    try { rep = await aiChat([{ role: 'user', content: base }], 768); } catch (e) {}
+    try { rep = await aiChat([{ role: 'user', content: base }], 768, 'speak'); } catch (e) {}
     if (!okRep(rep) && getAiKey()) {
       // ретрай напрямую через BYO-ключ (мимо шлюза)
       const history = session.msg.filter(m => m.who === 'me' || m.who === 'them').slice(-8).map(m => ({ role: m.who === 'me' ? 'user' : 'assistant', content: m.text }));
@@ -962,11 +960,10 @@ async function aiCoach(session, userText, engineNote) {
   if (location.protocol !== 'https:' && !getAiKey()) return;
   const z = session.z;
   const note = engineNote || 'обычный ход.';
-  window.__gwOp = 'coach';
   try {
     let c = '';
-    try { c = await aiChat([{ role: 'user', content: 'Ход: «' + userText + '». Заметка: ' + note + '.' }], 768); } catch (e) {}
-    if (isMostlyRussian(c) && !/[a-zA-Z]{4,}/.test(c)) { pushWho('coach', c); return; }
+    try { c = await aiChat([{ role: 'user', content: 'Ход: «' + userText + '». Заметка: ' + note + '.' }], 768, 'coach'); } catch (e) {}
+    if (c && c.length >= 10 && isMostlyRussian(c) && !/[a-zA-Z]{4,}/.test(c)) { pushWho('coach', c); return; }
     if (getAiKey()) {
       // ретрай напрямую (BYO)
       const sys = [
