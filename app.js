@@ -705,7 +705,7 @@ async function aiDebriefFill(session) {
     const facts = 'Итог: ' + (session.closed != null ? fmt(session.closed) : 'сделки нет') + '. Ходы пользователя: ' + ((session.mine || []).slice(0, 6).join(' | ') || 'цифр не было') + '.';
     let t = '';
     try { t = await aiChat([{ role: 'user', content: base + ' ||| Факты: ' + facts }], 768, 'debrief'); } catch (e) {}
-    if (isMostlyRussian(t)) {
+    if (t && t.length >= 10 && isMostlyRussian(t)) {
       holder.innerHTML = '<span class="badge">ИИ-разбор</span><p style="color:var(--txt)">' + esc(t) + '</p>';
       return;
     }
