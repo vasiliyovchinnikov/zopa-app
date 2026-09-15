@@ -498,7 +498,7 @@ function startSession(scen, d) {
     floor = Math.round(Number(d.opp.limit) * rnd(0.9, 1.1));
     offer = Math.round((floor * rnd(1.28, 1.48)) / 1000) * 1000;
   }
-  session = { z, scen, deal: d, floor, offer, round: 0, nudges: 0, mine: [], msg: [], over: false, ultimatum: false, closed: null, acceptedUltimatum: false, ai: !!getAiKey() };
+  session = { z, scen, deal: d, floor, offer, round: 0, nudges: 0, mine: [], msg: [], over: false, ultimatum: false, closed: null, acceptedUltimatum: false, ai: (location.protocol === 'https:' || !!getAiKey()) };
   renderSession();
   const opening = 'Слушайте, давайте к делу. Что у вас по деньгам? Только честно — у меня ещё три поставщика в работе.';
   const openingBuy = 'Вы нам в целом подходите. Но бюджет в этом году урезали. Начните с вашей лучшей цены — и без долгих прелюдий.';
@@ -911,7 +911,7 @@ function aiOpeningPrompt(session) {
 }
 
 async function aiSpeak(session, directive, fallbackText) {
-  if (!getAiKey()) { pushThem((directive && directive.fallbackText) || fallbackText); return; }
+  if (location.protocol !== 'https:' && !getAiKey()) { pushThem((directive && directive.fallbackText) || fallbackText); return; }
   const box = $id('chat');
   const typing = document.createElement('div');
   typing.className = 'msg them';
@@ -958,7 +958,8 @@ function okRep(t) {
 }
 
 async function aiCoach(session, userText, engineNote) {
-  if (!getAiKey() && location.protocol !== 'https:') return;
+  // шлюз работает на https всегда; без шлюза и без ключа — тишина
+  if (location.protocol !== 'https:' && !getAiKey()) return;
   const z = session.z;
   const note = engineNote || 'обычный ход.';
   window.__gwOp = 'coach';
