@@ -686,6 +686,7 @@ async function aiDebriefFill(session) {
   holder.className = 'card';
   holder.innerHTML = '<span class="badge">ИИ-разбор</span><p class="fine"><span class="typing">● ● ●</span> коуч готовит разбор партии…</p>';
   $id('drill-root').appendChild(holder);
+  await new Promise(r => setTimeout(r, 4200)); // после accept-speak и коуча — не ловить rate-limit шлюза
   // Скелет разбора строит движок (факты + правило канона), модель только оживляет.
   const z = session.z;
   const redFlag = session.closed != null && (z.sell ? session.closed < Number(session.deal.main.reserve) : session.closed > Number(session.deal.main.reserve));
