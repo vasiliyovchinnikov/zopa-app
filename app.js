@@ -75,10 +75,17 @@ function tone(s, kind, n, i) {
 function parseNum(text) {
   let t = String(text).toLowerCase().replace(/,/g, '.').replace(/\s/g, '');
   t = t.replace(/тыс(яч)?\.?/g, 'k').replace(/млн/g, 'm');
-  const m = t.match(/(\d+(?:\.\d+)?)(м|k)/);
-  if (m) { let v = parseFloat(m[1]); v *= m[2] === 'м' || m[2] === 'm' ? 1e6 : 1e3; return Math.round(v); }
-  const b = t.match(/(\d{2,}(?:\.\d+)?)/);
-  if (b) return Math.round(parseFloat(b[1]));
+  const m = t.match(/(\d+(?:\.\d+)?)([мmk])/);
+  if (m) { let v = parseFloat(m[1]); v *= m[2] === 'k' ? 1e3 : 1e6; return Math.round(v); }
+  // Голое число из 2–4 цифр в переговорах о деньгах — почти всегда тысячи
+  // («ладно, 780» = 780 000). 5+ знаков — абсолютные рубли, как есть.
+  const b = t.match(/(\d{1,}(?:\.\d+)?)/);
+  if (b) {
+    const v = parseFloat(b[1]);
+    const contextWord = /(%|процент|штук|дней|дня|недел|месяц|этап|рублей за лицензию)/.test(t);
+    if (v >= 10 && v < 10000 && !/(^|[^\d.])\d{5}/.test(t) && !contextWord) return Math.round(v * 1000);
+    return Math.round(v);
+  }
   return null;
 }
 const isYes = (t) => /^(да|согласен|согласна|принимаю|принимаю|ок|окей|беру|хорошо|ладно|год)/i.test(String(t).trim().toLowerCase());
@@ -470,8 +477,11 @@ function initDrill() {
       <h3 style="margin:0 0 6px">${esc(s.title)}</h3><p style="margin:0">${esc(s.desc)}</p>
       <p class="fine" style="margin:8px 0 0">Манера: ${esc(s.tone || 'деловая')}</p></div>`;
   });
-  html += `<p class="fine">Лимит контрагента скрыт и в каждой партии свой. Задача: нащупать его зону и не отдать свою.</p></div><div id="drill-live"></div>`;
+  html += `<p class="fine">Лимит контрагента скрыт и в каждой партии свой. Задача: нащупать его зону и не отдать свою.</p></div>
+  ${aiSettingsHtml()}
+  <div id="drill-live"></div>`;
   root.innerHTML = html;
+  wireAiSettings();
   root.querySelectorAll('[data-scen]').forEach((el) => {
     el.onclick = () => startSession(SCEN[Number(el.dataset.scen)], d);
   });
@@ -488,12 +498,16 @@ function startSession(scen, d) {
     floor = Math.round(Number(d.opp.limit) * rnd(0.9, 1.1));
     offer = Math.round((floor * rnd(1.28, 1.48)) / 1000) * 1000;
   }
-  session = { z, scen, deal: d, floor, offer, round: 0, nudges: 0, mine: [], msg: [], over: false, ultimatum: false, closed: null, acceptedUltimatum: false };
+  session = { z, scen, deal: d, floor, offer, round: 0, nudges: 0, mine: [], msg: [], over: false, ultimatum: false, closed: null, acceptedUltimatum: false, ai: !!getAiKey() };
   renderSession();
-  pushThem(z.sell
-    ? 'Слушайте, давайте к делу. Что у вас по деньгам? Только честно — у меня ещё три поставщика в работе.'
-    : 'Вы нам в целом подходите. Но бюджет в этом году урезали. Начните с вашей лучшей цены — и без долгих прелюдий.');
-  pushSys('Раунд 1. Лимит контрагента скрыт. Ваш ход — назовите цифру (или условия) или завершите и получите разбор.');
+  const opening = 'Слушайте, давайте к делу. Что у вас по деньгам? Только честно — у меня ещё три поставщика в работе.';
+  const openingBuy = 'Вы нам в целом подходите. Но бюджет в этом году урезали. Начните с вашей лучшей цены — и без долгих прелюдий.';
+  if (session.ai) {
+    aiSpeak(session, { system: aiOpeningPrompt(session) }, z.sell ? opening : openingBuy);
+  } else {
+    pushThem(z.sell ? opening : openingBuy);
+    pushSys('Раунд 1. Лимит контрагента скрыт. Ваш ход — назовите цифру (или условия) или завершите и получите разбор.');
+  }
 }
 
 function renderSession() {
@@ -536,34 +550,44 @@ function onUser() {
   if (!text || !session || session.over) return;
   inp.value = '';
   pushWho('me', text);
-  const num = parseNum(text);
+  let num = parseNum(text);
+  // «640», «ладно, 500» в контексте торга о крупной сделке — тысячи, а не рубли.
+  // Если цифра крошечная относительно текущих ставок в партии — умножаем на 1000.
+  if (num != null && num > 0 && num < 10000) {
+    const rates = [session.offer, ...session.mine.map(x => parseNum(x))].filter(x => x != null && x >= 10000);
+    const ref = rates.length ? Math.max(...rates) : null;
+    if (ref && num * 1000 >= ref * 0.03) num = num * 1000;
+  }
   session.mine.push(text);
 
   if (session.ultimatum) {
     const z = session.z;
-    if (isYes(text)) { session.closed = session.offer; session.acceptedUltimatum = true; pushThem(tone(session.scen, 'accept', session.closed)); endSession(); }
+    if (isYes(text)) { session.closed = session.offer; session.acceptedUltimatum = true; endSession(); return; }
     else if (num != null) {
       const okForThem = z.sell ? num <= session.floor : num >= session.floor;
-      if (okForThem) { session.closed = num; pushThem(tone(session.scen, 'accept', num, 0)); endSession(); return; }
+      if (okForThem) { session.closed = num; endSession(); return; }
       session.ultRefusals = (session.ultRefusals || 0) + 1;
       if (session.ultRefusals >= 3) { endSession(`Разошлись: их финал — ${fmt(session.offer)}, ваша последняя цифра — ${fmt(num)}.`); return; }
-      pushThem('Цифры мы уже назвали. Наша — ' + fmt(session.offer) + '. Или берёте, или расходимся.');
+      aiSpeak(session, { system: `Сводка для твоей реплики: собеседник снова не принял твой оффер ${fmt(session.offer)}. Повтори его жёстче, без новых цифр.` }, 'Цифры мы уже назвали. Наша — ' + fmt(session.offer) + '. Или берёте, или расходимся.');
+      aiCoach(session, text, 'пользователь отказался от их финального оффера, сузил до ' + fmt(num));
+      return;
     }
-    else pushThem('Да или нет. Называйте цифру, если не согласны.');
-    return;
+    else { aiSpeak(session, { system: 'Пользователь уклончив, цифры нет. Потребуйте цифру прямо.' }, 'Да или нет. Называйте цифру, если не согласны.'); return; }
   }
   if (num == null) {
     session.nudges++;
     if (session.nudges >= 3) { endSession('Цена так и не прозвучала — разговор сошёл на нет.'); return; }
-    pushThem(tone(session.scen, 'nudge', session.offer));
+    aiSpeak(session, { system: 'Сводка для твоей реплики: собеседник уходит от цены, говорит «' + text.slice(0, 120) + '». Требуй цифру прямо, дави по характеру.' }, tone(session.scen, 'nudge', session.offer));
+    aiCoach(session, text, 'ход без цифры (уклончивый)');
     return;
   }
-  resolveNum(num);
+  resolveNum(num, text);
 }
 
-function resolveNum(num) {
+async function resolveNum(num, userText) {
   const z = session.z, d = session.deal;
   const r = Number(d.main.reserve);
+  const userText2 = userText || String(num);
   // Проверка на движение против себя
   const nums = session.mine.map(parseNum).filter((x) => x != null);
   const prev = nums.length >= 2 ? nums[nums.length - 2] : null;
@@ -573,11 +597,16 @@ function resolveNum(num) {
   // Принятие: их floor достигнут?
   const okForThem = z.sell ? num <= session.floor : num >= session.floor;
   const nearFloor = Math.abs(num - session.floor) <= Math.abs(session.floor) * 0.04;
-  // Слишком хорошая для них цена (ниже их floor) = подозрительно дёшево, но они соглашаются
   if (okForThem && (session.round >= 1 || nearFloor)) {
     session.closed = num;
-    pushThem(tone(session.scen, 'accept', num, 0));
-    endSession();
+    if (session.ai) {
+      aiSpeak(session, { system: `Сводка для твоей реплики: собеседник предложил ${fmt(num)} — тебя это устраивает. Соглашайся и фиксируй договорённость.` }, tone(session.scen, 'accept', num, 0));
+      aiCoach(session, userText2, 'предложил ' + fmt(num) + ' — контрагент принимает');
+      setTimeout(endSession, 3200);
+    } else {
+      pushThem(tone(session.scen, 'accept', num, 0));
+      endSession();
+    }
     return;
   }
   // Чужой лимит раундов
@@ -585,8 +614,14 @@ function resolveNum(num) {
   const remaining = Math.abs(session.floor - session.offer);
   if (remaining <= minStepVal(session.floor) * 1.6 || session.round >= session.scen.patience * 2) {
     session.ultimatum = true;
-    pushThem(tone(session.scen, 'ultimatum', session.floor));
-    pushSys('Это их финальная цифра. Ответьте «да» — принять, или назовите свою. «Завершить» — разбор без сделки.');
+    const sysLine = 'Это их финальная цифра. Ответьте «да» — принять, или назовите свою. «Завершить» — разбор без сделки.';
+    if (session.ai) {
+      aiSpeak(session, { system: `Сводка для твоей реплики: это твой предел. Назови ${fmt(session.floor)} как окончательную цену и дай понять, что дальше — только прощание.` }, tone(session.scen, 'ultimatum', session.floor));
+      setTimeout(() => pushSys('Это их финальная цифра. «Да» — принять, назовите свою — продолжить, «Завершить» — разбор.'), 900);
+    } else {
+      pushThem(tone(session.scen, 'ultimatum', session.floor));
+      pushSys(sysLine);
+    }
     return;
   }
   // Их уступка в сторону floor
@@ -594,13 +629,11 @@ function resolveNum(num) {
   session.offer = z.sell
     ? Math.min(session.floor, session.offer + step)
     : Math.max(session.floor, session.offer - step);
-  if (num >= z.r === false) {} // (резерв юзера бот не знает и не проверяет — честно)
-  if (selfDefeat) {
-    pushThem(tone(session.scen, 'hold', session.offer));
-    pushSys('Заметьте: вы уступили, а они — нет. Это признак слабой позиции или слабой подачи.');
-  } else {
-    pushThem(tone(session.scen, 'concede', session.offer));
-  }
+  const directive = selfDefeat
+    ? { system: `Сводка ситуации для твоего хода: собеседник только что предложил ${fmt(num)} — сам, без твоего движения. Ты пока не двигаешься к своей цели, отвечай с давлением и без новых цифр.`, fallbackText: tone(session.scen, 'hold', session.offer) }
+    : { system: `Сводка для твоей реплики: ты называешь ${fmt(session.offer)}. Добей собеседника и потребуй встречного движения.`, fallbackText: tone(session.scen, 'concede', session.offer) };
+  aiSpeak(session, directive, directive.fallbackText);
+  aiCoach(session, userText2, selfDefeat ? 'торг против себя: уступка без встречного движения контрагента' : 'обычная уступка');
 }
 
 function minStepVal(floor) { return Math.max(500, Math.round(Math.abs(floor) * 0.02)); }
@@ -645,6 +678,43 @@ function endSession(reason) {
   $id('drill-root').innerHTML = html;
   $id('d-again').onclick = () => startSession(session.scen, session.deal);
   $id('d-home').onclick = () => initDrill();
+  if (session.ai) aiDebriefFill(session);
+}
+
+async function aiDebriefFill(session) {
+  const holder = document.createElement('div');
+  holder.className = 'card';
+  holder.innerHTML = '<span class="badge">ИИ-разбор</span><p class="fine"><span class="typing">● ● ●</span> коуч готовит разбор партии…</p>';
+  $id('drill-root').appendChild(holder);
+  // Скелет разбора строит движок (факты + правило канона), модель только оживляет.
+  const z = session.z;
+  const redFlag = session.closed != null && (z.sell ? session.closed < Number(session.deal.main.reserve) : session.closed > Number(session.deal.main.reserve));
+  const delta = session.closed != null
+    ? Math.round(100 - Math.abs(session.closed - session.floor) / Math.max(session.floor, 1) * 100)
+    : 0;
+  const base = session.closed != null
+    ? 'Итог: ' + fmt(session.closed) + ' — ' + (redFlag ? 'СДЕЛКА ХУЖЕ ВАШЕГО РЕЗЕРВА, надо было встать и уйти' : (delta > 60 ? 'вы забрали львиную долю зоны' : 'зона поделена почти пополам')) +
+      '. ' + (session.mine.length >= 2 ? 'Уступки: ' + session.mine.map(parseNum).filter(x => x != null).join(' → ') + '. ' : '') +
+      'Совет: уступка только в обмен на их шаг, зону нащупывайте вопросами о бюджете.'
+    : 'Сделки нет: зоны не нашлось. Совет: расширяйте пир — сроки, объём, гарантии, состав предметов торга.';
+  const sys = [
+    'Ты — русский коуч по переговорам (канон Raiffa / Harvard PON / Voss). Отвечай ТОЛЬКО по-русски.',
+    'Оживи черновик разбора партии: сохрани факты и советы, скажи живее, 3 коротких пункта через «;», до 400 знаков.'
+  ].join('\n');
+  try {
+    let t = await aiChat([
+      { role: 'system', content: sys },
+      { role: 'user', content: 'Черновик разбора: «' + base + '»\nФакты: ходы пользователя: ' + ((session.mine || []).slice(0, 6).join(' | ') || 'цифр не было') + '. Оживи по-русски.' }
+    ], 768);
+    if (!isMostlyRussian(t)) {
+      const fix = await aiChat([{ role: 'system', content: sys }, { role: 'user', content: 'Черновик: «' + base + '». Разбор по-русски, без рассуждений:' }], 768);
+      if (isMostlyRussian(fix)) t = fix;
+    }
+    if (isMostlyRussian(t)) holder.innerHTML = '<span class="badge">ИИ-разбор</span><p style="color:var(--txt)">' + esc(t) + '</p>';
+    else holder.remove();
+  } catch (e) {
+    holder.innerHTML = '<span class="badge">ИИ-разбор</span><p style="color:var(--txt)">' + esc(base) + '</p>';
+  }
 }
 
 /* ================= ЭКРАН 4: ШПАРГАЛКА ================= */
@@ -727,6 +797,178 @@ function toast(txt) {
   d.className = 'toast'; d.textContent = txt;
   document.body.appendChild(d);
   setTimeout(() => d.remove(), 2200);
+}
+
+/* ---------------- ИИ-слой (Infereco / OpenAI-совместимый) ---------------- */
+const AI_KEY_STORAGE = 'zopa_ai_key_v1';
+const AI_URL = 'https://api.infereco.ru/v1/chat/completions';
+const AI_MODEL = 'glm/glm-5.3-flash';
+
+function getAiKey() { return localStorage.getItem(AI_KEY_STORAGE) || ''; }
+function setAiKey(k) { k = (k || '').trim(); if (k) localStorage.setItem(AI_KEY_STORAGE, k); else localStorage.removeItem(AI_KEY_STORAGE); }
+
+async function aiChat(messages, maxTokens) {
+  const key = getAiKey();
+  if (!key) throw new Error('no-key');
+  const call = async () => {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 45000);
+    try {
+      const res = await fetch(AI_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({ model: AI_MODEL, messages, max_tokens: maxTokens || 768, temperature: 0.85 }),
+        signal: ctrl.signal
+      });
+      if (!res.ok) throw new Error('http-' + res.status);
+      const data = await res.json();
+      const m = data && data.choices && data.choices[0] && data.choices[0].message || {};
+      // GLM может вернуть <think>…</think> внутри content — срезаем
+      const raw = (m.content || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
+        || (m.reasoning_content || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      return raw;
+    } finally { clearTimeout(to); }
+  };
+  let txt = '';
+  for (let i = 0; i < 2; i++) {
+    try { txt = await call(); } catch (e) { if (i === 0) continue; throw e; }
+    if (txt) return txt;
+  }
+  throw new Error('empty');
+}
+
+function isMostlyRussian(t) {
+  const letters = (t || '').match(/[a-zA-Zа-яА-ЯёЁ]/g) || [];
+  if (!letters.length) return true;
+  const cyr = letters.filter(c => /[а-яА-ЯёЁ]/.test(c)).length;
+  return cyr / letters.length >= 0.6;
+}
+
+function stripQuote(t) {
+  t = (t || '').trim();
+  const m = t.match(/^["«](.+?)["»]$/s);
+  if (m) t = m[1];
+  return t.replace(/^[-—–]\s*/, '').trim();
+}
+
+function aiSystemPrompt(session, moveDirective) {
+  const z = session.z;
+  const themSide = z.sell ? 'покупатель' : 'продавец';
+  return [
+    'Ролевая игра. Ты играешь русского делового партнёра в переговорах. Это НЕ ассистент и НЕ анализ — твой каждый ответ есть ТОЛЬКО устная реплика персонажа на русском языке.',
+    'Пример стиля ответа (как надо): «Восемьсот тридцать? Смешно. У нас есть предложение на семьсот, уже согласованное. Либо вы двигаетесь к нашим шести, либо мы заканчиваем.»',
+    'Запрещено: английский язык, рассуждения о себе в третьем лице, слова «user», «пользователь», анализ своих действий, раскрытие любых пределов и бюджетов. Только живая речь персонажа.',
+    `Ты — ${themSide}. Собеседник (пользователь) — ${z.sell ? 'продавец' : 'покупатель'}.`,
+    `Твой характер: ${session.scen.desc}`,
+    `Манера речи: ${session.scen.tone || 'деловая, живая'}.`,
+    `Контекст сделки пользователя: ${session.deal.title || 'переговоры'}.`,
+    'Твои цифры тебе сообщает система в директиве — озвучивай ТОЛЬКО их. Своих пределов ты вслух не знаешь: на вопросы «какой ваш предел/бюджет/дно» отвечай уклончиво или встречным давлением.',
+    'Реплика: 1–3 предложения, живая разговорная русская речь, без списков и кавычек. Дави характером: альтернативы, бюджет, сроки, риски.' + (moveDirective ? '\n' + moveDirective : '')
+  ].join('\n');
+}
+
+function aiOpeningPrompt(session) {
+  const z = session.z;
+  return 'Начни переговоры первой репликой: потребуй ' + (z.sell ? 'назвать цену сразу и честно, упомяни, что есть альтернативы' : 'твою стартовую цену слишком высоко не называя — запроси их бюджет и лучшие условия сразу');
+}
+
+async function aiSpeak(session, directive, fallbackText) {
+  if (!getAiKey()) { pushThem((directive && directive.fallbackText) || fallbackText); return; }
+  const box = $id('chat');
+  const typing = document.createElement('div');
+  typing.className = 'msg them';
+  typing.innerHTML = '<span class="typing">● ● ●</span>';
+  if (box) { box.appendChild(typing); box.scrollTop = box.scrollHeight; }
+  try {
+    const history = session.msg.filter(m => m.who === 'me' || m.who === 'them').slice(-8).map(m => ({ role: m.who === 'me' ? 'user' : 'assistant', content: m.text }));
+    // Скелет реплики всегда от движка (fallbackText содержит нужную цифру и вектор),
+    // LLM только оживляет формулировку. Любой сбой → заготовка. Игра не ломается никогда.
+    const seedRep = 'Пока ваши цифры выше наших заявок. Хочу услышать вас.';
+    const base = fallbackText || '';
+    const msgs = [
+      { role: 'system', content: aiSystemPrompt(session, '') },
+      { role: 'user', content: '(начало переговоров)' },
+      { role: 'assistant', content: seedRep },
+      ...history,
+      { role: 'user', content: 'Черновик твоей реплики: «' + base + '»\nОживи её в своем характере: сохрани цифры и смысл, говори живее, 1–3 предложения. Только реплика по-русски.' }
+    ];
+    let rep = await aiChat(msgs, 768);
+    if (!okRep(rep)) {
+      const fix = await aiChat([
+        { role: 'system', content: aiSystemPrompt(session, '') },
+        ...history,
+        { role: 'user', content: 'Черновик: «' + base + '»\nПредыдущая попытка была рассуждением вместо игры. Дай только реплику персонажа по-русски.' }
+      ], 768);
+      if (okRep(fix)) rep = fix; else rep = base;
+    }
+    if (!okRep(rep)) rep = base;
+    if (rep.length > 420) rep = rep.slice(0, 417).trim() + '…';
+    typing.remove();
+    pushThem(stripQuote(rep));
+  } catch (e) {
+    typing.remove();
+    pushThem(fallbackText);
+    pushSys('ИИ недоступен (' + e.message + ') — отвечаю заготовками. Проверьте ключ в настройках.');
+  }
+}
+
+function okRep(t) {
+  if (!t) return false;
+  if (!isMostlyRussian(t)) return false;
+  if (/\b(user|my role|the user|directive|presumably|director|draft|черновик|система сообщ)\w*/i.test(t)) return false;
+  return true;
+}
+
+async function aiCoach(session, userText, engineNote) {
+  if (!getAiKey()) return;
+  const z = session.z;
+  const sys = [
+    'Ты — русский коуч по переговорам (канон Raiffa / Harvard PON / Voss). Отвечай ТОЛЬКО по-русски.',
+    'Оцени ход пользователя одной фразой (до 140 знаков): что сделал + что по канону (якорь, Ackerman, торг против себя, раскрытие резерва, вопросы вместо уступок).',
+    'Пример тона: «Якорь поставлен агрессивно, но с обоснованием — по канону. Дальше не уступайте без встречного движения.»',
+    'Вывод = ТОЛЬКО одна фраза оценки по-русски. Не пересказывайте ход, не объясняйте задание, не пишите по-английски, не используйте слово «user».',
+    'Без похвалы ради похвалы; слабый ход — прямо и с исправлением. Без списков и markdown. Никакого английского.',
+    `Роль пользователя: ${z.sell ? 'продавец' : 'покупатель'}. Его резерв и цель системе известны, тебе — нет (не спрашивай).`,
+    'Заметка о ходе: ' + (engineNote || 'обычный ход.')
+  ].join('\n');
+  try {
+    const c = await aiChat([{ role: 'system', content: sys }, { role: 'user', content: 'Ход пользователя: «' + userText + '». Оцени.' }], 768);
+    // Если модель ушла в английский/пересказ — последний шанс: просим русскую оценку
+    if (isMostlyRussian(c) && !/[a-zA-Z]{4,}/.test(c)) pushWho('coach', c);
+    else {
+      const fix = await aiChat([
+        { role: 'system', content: sys + '\nПРЕДЫДУЩАЯ ПОПЫТКА БЫЛА НЕ ПО ФОРМАТУ (английский/пересказ). Ответ — только одна фраза оценки по-русски, не пересказ хода.' },
+        { role: 'user', content: 'Ход: «' + userText + '». Оценка по-русски, одна фраза:' }
+      ], 768);
+      if (isMostlyRussian(fix) && !/[a-zA-Z]{4,}/.test(fix)) pushWho('coach', fix);
+    }
+  } catch (e) { /* коуч не критичен */ }
+}
+
+function aiSettingsHtml() {
+  const has = !!getAiKey();
+  return `<div class="card">
+    <span class="badge">ИИ-спарринг</span>
+    <h3>${has ? '🤖 ИИ-контрагент включён' : '∘ ИИ-контрагент: подключить'}</h3>
+    <p class="fine">${has ? 'Реплики пишет языковая модель (Infereco). Ключ хранится только в вашем браузере. Ключ можно сменить или отключить.' : 'Без ключа играет заготовленный бот (полностью рабочий). С ключом — живые реплики и коуч после каждого хода. Ключ API (Infereco или любой OpenAI-совместимый) хранится только в вашем браузере.'}</p>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <input type="password" id="ai-key-in" placeholder="Ключ API (sk-…)" style="flex:1;min-width:200px;background:#0d1320;border:1px solid var(--line);color:var(--txt);font:inherit;padding:11px 13px;border-radius:11px" value="${has ? '••••••••' : ''}">
+      <button class="btn ghost" id="ai-save">${has ? 'Сменить' : 'Подключить'}</button>
+      ${has ? '<button class="btn ghost" id="ai-off">Отключить</button>' : ''}
+    </div>
+  </div>`;
+}
+
+function wireAiSettings() {
+  const s = $id('ai-save');
+  if (s) s.onclick = () => {
+    const v = $id('ai-key-in').value.trim();
+    if (v && v !== '••••••••') { setAiKey(v); toast('ИИ подключён'); }
+    else if (!v) { setAiKey(''); }
+    initDrill();
+  };
+  const off = $id('ai-off');
+  if (off) off.onclick = () => { setAiKey(''); toast('ИИ отключён'); initDrill(); };
 }
 
 /* ---------------- старт ---------------- */
