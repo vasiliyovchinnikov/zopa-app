@@ -569,7 +569,7 @@ function onUser() {
       session.ultRefusals = (session.ultRefusals || 0) + 1;
       if (session.ultRefusals >= 3) { endSession(`Разошлись: их финал — ${fmt(session.offer)}, ваша последняя цифра — ${fmt(num)}.`); return; }
       aiSpeak(session, { system: `Сводка для твоей реплики: собеседник снова не принял твой оффер ${fmt(session.offer)}. Повтори его жёстче, без новых цифр.` }, 'Цифры мы уже назвали. Наша — ' + fmt(session.offer) + '. Или берёте, или расходимся.');
-      aiCoach(session, text, 'пользователь отказался от их финального оффера, сузил до ' + fmt(num));
+      setTimeout(() => aiCoach(session, text, 'пользователь отказался от их финального оффера, сузил до ' + fmt(num)), 4200);
       return;
     }
     else { aiSpeak(session, { system: 'Пользователь уклончив, цифры нет. Потребуйте цифру прямо.' }, 'Да или нет. Называйте цифру, если не согласны.'); return; }
@@ -578,7 +578,7 @@ function onUser() {
     session.nudges++;
     if (session.nudges >= 3) { endSession('Цена так и не прозвучала — разговор сошёл на нет.'); return; }
     aiSpeak(session, { system: 'Сводка для твоей реплики: собеседник уходит от цены, говорит «' + text.slice(0, 120) + '». Требуй цифру прямо, дави по характеру.' }, tone(session.scen, 'nudge', session.offer));
-    aiCoach(session, text, 'ход без цифры (уклончивый)');
+    setTimeout(() => aiCoach(session, text, 'ход без цифры (уклончивый)'), 4200);
     return;
   }
   resolveNum(num, text);
@@ -601,7 +601,7 @@ async function resolveNum(num, userText) {
     session.closed = num;
     if (session.ai) {
       aiSpeak(session, { system: `Сводка для твоей реплики: собеседник предложил ${fmt(num)} — тебя это устраивает. Соглашайся и фиксируй договорённость.` }, tone(session.scen, 'accept', num, 0));
-      aiCoach(session, userText2, 'предложил ' + fmt(num) + ' — контрагент принимает');
+      setTimeout(() => aiCoach(session, userText2, 'предложил ' + fmt(num) + ' — контрагент принимает'), 4200);
       setTimeout(endSession, 3200);
     } else {
       pushThem(tone(session.scen, 'accept', num, 0));
@@ -633,7 +633,7 @@ async function resolveNum(num, userText) {
     ? { system: `Сводка ситуации для твоего хода: собеседник только что предложил ${fmt(num)} — сам, без твоего движения. Ты пока не двигаешься к своей цели, отвечай с давлением и без новых цифр.`, fallbackText: tone(session.scen, 'hold', session.offer) }
     : { system: `Сводка для твоей реплики: ты называешь ${fmt(session.offer)}. Добей собеседника и потребуй встречного движения.`, fallbackText: tone(session.scen, 'concede', session.offer) };
   aiSpeak(session, directive, directive.fallbackText);
-  aiCoach(session, userText2, selfDefeat ? 'торг против себя: уступка без встречного движения контрагента' : 'обычная уступка');
+  setTimeout(() => aiCoach(session, userText2, selfDefeat ? 'торг против себя: уступка без встречного движения контрагента' : 'обычная уступка'), 4200);
 }
 
 function minStepVal(floor) { return Math.max(500, Math.round(Math.abs(floor) * 0.02)); }
@@ -822,22 +822,28 @@ function setAiKey(k) { k = (k || '').trim(); if (k) localStorage.setItem(AI_KEY_
 async function aiChat(messages, maxTokens, gwOp) {
   // Приоритет 1: серверный шлюз (ключ не нужен, лимиты на стороне шлюза)
   if (location.protocol === 'https:') {
-    try {
-      const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 50000);
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const res = await fetch(GW_URL + '?op=' + (gwOp || 'speak'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-GW-Token': GW_TOKEN },
-          body: JSON.stringify({ messages }),
-          signal: ctrl.signal
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.ok && data.text) return data.text;
-        }
-      } finally { clearTimeout(to); }
-    } catch (e) { /* шлюз молчит — пробуем прямой путь */ }
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 50000);
+        try {
+          const res = await fetch(GW_URL + '?op=' + (gwOp || 'speak'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-GW-Token': GW_TOKEN },
+            body: JSON.stringify({ messages }),
+            signal: ctrl.signal
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.ok && data.text) return data.text;
+          } else if (res.status === 429 && attempt === 0) {
+            // rate-limit шлюза (4 сек между запросами) — подождать и повторить один раз
+            await new Promise(r => setTimeout(r, 4500));
+            continue;
+          }
+        } finally { clearTimeout(to); }
+      } catch (e) { break; }
+    }
   }
   // Приоритет 2: BYO-ключ напрямую в Infereco
   return aiChatDirect(messages, maxTokens);
