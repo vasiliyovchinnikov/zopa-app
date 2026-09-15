@@ -118,6 +118,9 @@ ul.clean li::before { content: "▸"; position: absolute; left: 4px; color: var(
 .msg.me { background: #134e4a; margin-left: auto; border-bottom-right-radius: 4px; color: #d1fae5; }
 .msg.them { background: var(--card2); margin-right: auto; border-bottom-left-radius: 4px; }
 .msg.sys { background: transparent; color: var(--warn); font-size: 12.5px; text-align: center; margin: 4px auto; max-width: 95%; }
+.msg.coach { background: transparent; border-left: 3px solid var(--warn); color: #d8c9a3; font-size: 13px; margin: 2px auto 8px 6px; max-width: 94%; border-radius: 4px; padding: 7px 11px; }
+.typing { display: inline-block; animation: blink 1.1s infinite; }
+@keyframes blink { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
 .chat-input { display: flex; gap: 8px; }
 .chat-input input {
   flex: 1; min-width: 0; background: #0d1320; border: 1px solid var(--line); color: var(--txt);
