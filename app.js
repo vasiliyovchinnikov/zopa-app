@@ -58,23 +58,15 @@ async function loadScenarios() {
 
 /* ---------------- реплики бота ---------------- */
 const TONE_PROC = {
-  hold: ['Это выше того, что я могу согласовать. Реально — {N}.', 'У меня другие цифры. {N}.', 'Конкуренты дешевле. {N} — и я подумаю.'],
+  hold: ['Это выше того, что я могу согласовать. Реально — {N}.', 'У меня другие цифры. {N}.', 'Портфель и так перегружен. {N} — и я подумаю.'],
   concede: ['Хорошо. {N}. Но дальше — только решение сверху.', 'Ладно. {N} — и не просите больше.', '{N}. Это максимум, что дотягиваю сам.'],
   accept: ['По {N} согласен. Зафиксируем.', '{N}. Хорошо, берём.'],
   ultimatum: ['Финал: {N}. Да или нет?', 'Последняя цифра — {N}. Либо да, либо закрываем тему.'],
-  nudge: ['Цену назовите. Без цифры говорить не о чем.', 'Мне нужна цифра, а не рассказ.'],
-  away: ['Вы цену не в ту сторону двигаете? Серьёзно? Остаёмся на {N}.']
-};
-const TONE_CFO = {
-  hold: ['Не проходит по экономике. Реально — {N}.', 'ROI не сходится. {N} — потолок.', 'У меня лимит согласований. {N} — максимум, который подпишу.'],
-  concede: ['Хм. {N} — при условии фиксации объёма и сроков.', 'Ладно. {N}. Вношу в бюджет как крайнюю точку.', 'Редко так двигаюсь. {N}.'],
-  accept: ['Принято. {N}. Готовьте договор.', 'Ок. {N}. Отправляйте на подпись.'],
-  ultimatum: ['До конца недели: {N}, потом бюджет уходит другому проекту.', '{N} — финал. Решайте.'],
-  nudge: ['Числа. Мне нужны числа.', 'Эмоции потом. Цифра какая?'],
-  away: ['Это шаг назад. Остаёмся на {N}.']
+  nudge: ['Долю назовите. Без цифры говорить не о чем.', 'Мне нужна цифра, а не рассказ про игру.'],
+  away: ['Вы цифру не в ту сторону двигаете? Серьёзно? Остаёмся на {N}.']
 };
 function tone(s, kind, n, i) {
-  const bank = (s.id === 'cfo' ? TONE_CFO : TONE_PROC)[kind];
+  const bank = TONE_PROC[kind];
   const line = bank[i == null ? Math.min(session.round, bank.length - 1) : i];
   return line.replace('{N}', fmtU(n, session.scen || session));
 }
@@ -144,8 +136,8 @@ function viewBrief() {
   <div class="card">
     <h3>Что здесь есть</h3>
     <ul class="clean">
-      <li><strong>«Собрать»</strong> — конструктор подготовки: зона, первый оффер, лестница уступок, три равноценных пакета (MESO) и one-sheet для стола.</li>
-      <li><strong>«Тренажёр»</strong> — 4 кейса геймдев-переговоров с ИИ-контрагентом: издатель, ангел, buyout, аутсорс. Скрытый резерв, очки, разбор.</li>
+      <li><strong>«Собрать»</strong> — конструктор подготовки: зона, первый оффер, лестница уступок, три равноценных пакета (MESO) и одна страница для стола (one-sheet).</li>
+      <li><strong>«Тренажёр»</strong> — 4 кейса геймдев-переговоров с ИИ-контрагентом: издатель, ангел-неигровик, выкуп доли студии (buyout), аутсорс-контракт. Скрытый резерв, очки, разбор.</li>
       <li><strong>«Шпаргалка»</strong> — механики с доказательной базой + предметы торга геймдева: якорение, Ackerman, MESO, расширение отрицательной зоны.</li>
     </ul>
     <p class="fine" style="margin-top:10px">Методология — открытый канон переговорного анализа: Raiffa «The Art and Science of Negotiation» (1982), Fisher &amp; Ury «Getting to Yes», Harvard Program on Negotiation, Lax–Sebenius «3-D Negotiation», Voss «Never Split the Difference».</p>
@@ -156,7 +148,7 @@ function viewBrief() {
       <h3>Три правила до стола</h3>
       <ul class="clean">
         <li>Усильте BATNA: вторая площадка или издатель — единственная настоящая сила.</li>
-        <li>Первое число сильно предсказывает финал (Galinsky &amp; Mussweiler, 2001). Готовьте якорь заранее — от вишлистов, retention и сопоставимых сделок.</li>
+        <li>Первое число сильно предсказывает финал (Galinsky &amp; Mussweiler, 2001). Готовьте якорь заранее — от вишлистов, удержания игроков (retention) и сопоставимых сделок.</li>
         <li>Никогда не принимайте хуже своего резерва. Никогда — даже если «других издателей нет».</li>
       </ul>
     </div>
@@ -378,7 +370,7 @@ function buildResult() {
   const dir = z.sell ? 1 : -1;
   html += `<h3>Вход и уступки</h3>
   <ul class="clean">
-    <li><strong>Первый оффер (якорь): ${fmtB(A)}</strong>. Агрессивно, но не абсурдно — и всегда с обоснованием: вишлисты, retention, сравнимые сделки, деньги на маркетинг. Первое число сильно тянет финал за собой (Galinsky &amp; Mussweiler, 2001).</li>
+    <li><strong>Первый оффер (якорь): ${fmtB(A)}</strong>. Агрессивно, но не абсурдно — и всегда с обоснованием: вишлисты, удержание игроков (retention), сравнимые сделки, деньги на маркетинг. Первое число сильно тянет финал за собой (Galinsky &amp; Mussweiler, 2001).</li>
     <li><strong>Лестница уступок (Ackerman):</strong> ${fmtB(A)} → ${fmtB(L1)} → ${fmtB(L2)} → <strong>${fmtB(z.t)}</strong> — шаги уменьшаются (это сигнал: «зона кончается»). Только в обмен на их движение: бюджет маркетинга, этапы, права. Финальная цифра — некруглая и точная.</li>
     <li><strong>Между уступками — вопросы</strong>, а не встречные предложения: «Как это работает для вашего портфеля?», «Что произойдёт с вашим окном релиза, если не сойдёмся?»</li>
   </ul>`;
@@ -392,8 +384,8 @@ function buildResult() {
   const exA = ex[0] ? ex[0].name.toLowerCase() : 'маркетинговый бюджет в договоре';
   const exB = ex[1] ? ex[1].name.toLowerCase() : 'права на сиквелы у студии';
   const exC = ex[2] ? ex[2].name.toLowerCase() : 'этапы выплат';
-  html += `<h3>Три равноценных пакета (MESO)</h3>
-  <p>Предложите одновременно — вы выглядите гибким, а их выбор покажет приоритеты (Medvec &amp; Galinsky). Проверьте на глаз: пакеты должны быть примерно равны для вас.</p>
+  html += `<h3>Три равноценных пакета (MESO — «Multiple Equivalent Simultaneous Offers»)</h3>
+  <p>Несколько равноценных для вас офферов одновременно: вы выглядите гибким, а их выбор покажет приоритеты (Medvec &amp; Galinsky). Проверьте на глаз: пакеты должны быть примерно равны для вас.</p>
   <ul class="clean">
     <li><strong>Пакет А:</strong> ${fmtB(packs[0])} — условия как есть.</li>
     <li><strong>Пакет Б:</strong> ${fmtB(packs[1])} ${z.sell ? '−' : '+'} взамен: ${esc(exA)} (${esc(ex[0] && ex[0].note ? ex[0].note : 'ваша выгода')}).</li>
@@ -401,7 +393,7 @@ function buildResult() {
   </ul>`;
 
   html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
-    <button class="btn" id="w-copy">Скопировать one-sheet</button>
+    <button class="btn" id="w-copy">Скопировать одну страницу (one-sheet)</button>
     <button class="btn ghost" id="w-drill">Проверить в тренажёре →</button>
   </div>
   <p class="fine" style="margin-top:8px">Подготовка автоматически сохраняется в этом браузере — тренажёр её подхватит.</p>`;
@@ -523,7 +515,14 @@ function initDrill() {
       <p>Кейсы геймдев-переговоров: метрика и зоны заданы сценарием на основе рыночной фактуры. Своя сделка — по кнопке ниже.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn ghost" id="d-build">Своя сделка →</button>
-      </div></div>
+      </div>
+      <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">🎲 Как играть и считаются очки</summary>
+      <div class="fine" style="margin-top:8px;line-height:1.6">
+      <strong>Ход</strong> — просто пишите в чат: цифру, условия или вопрос. Контрагент скрыл свой предел — нащупывайте вопросами, торгуйтесь от рынка (вишлисты, retention, медианы сделок).<br>
+      <strong>Очки:</strong> уступка только в обмен на их шаг +10 · транши/вехи +10 · ссылка на альтернативу (BATNA) +12 · вопрос вместо голой цифры +5. Чем ближе закрытие к их скрытому лимиту — тем больше очков за сделку (до 200).<br>
+      <strong>Штрафы:</strong> торговля против себя −15 · назвали свой минимум −15 · просительная позиция −10 · пообещали «гарантии возврата» −10 · отдали IP −20.<br>
+      <strong>Серия</strong> 🔥 — несколько удачных ходов подряд. В конце партии — ранг S/A/B/C и ачивки.
+      </div></details></div>
       <div id="scen-list"></div>
       <div id="drill-live"></div>`;
     $id('d-build').onclick = () => nav('build');
@@ -550,6 +549,13 @@ function initDrill() {
   });
   const g = loadGame();
   html += `<p class="fine">Лимит контрагента скрыт и в каждой партии свой. Задача: нащупать его зону и не отдать свою.</p>
+  <details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">🎲 Как играть и считаются очки</summary>
+  <div class="fine" style="margin-top:8px;line-height:1.6">
+  <strong>Ход</strong> — просто пишите в чат: цифру, условия или вопрос. Контрагент скрыл свой предел — нащупывайте вопросами, торгуйтесь от рынка (вишлисты, retention, медианы сделок).<br>
+  <strong>Очки:</strong> уступка только в обмен на их шаг +10 · транши/вехи +10 · ссылка на альтернативу (BATNA) +12 · вопрос вместо голой цифры +5. Чем ближе закрытие к их скрытому лимиту — тем больше очков за сделку (до 200).<br>
+  <strong>Штрафы:</strong> торговля против себя −15 · назвали свой минимум −15 · просительная позиция −10 · пообещали «гарантии возврата» −10 · отдали IP −20.<br>
+  <strong>Серия</strong> 🔥 — несколько удачных ходов подряд. В конце партии — ранг S/A/B/C и ачивки. Счёт копится между партиями в браузере.
+  </div></details>
   <p>🏅 Всего очков: <strong>${g.total}</strong> · партий: ${g.played} · лучший счёт: <strong>${g.best}</strong>${g.badges.length ? ' · ачивок: ' + g.badges.length : ''}</p></div>
   ${aiSettingsHtml()}
   <div id="drill-live"></div>`;
@@ -597,7 +603,7 @@ function startSession(scen, d) {
     aiSpeak(session, { system: aiOpeningPrompt(session) }, opening);
   } else {
     pushThem(opening);
-    pushSys('Раунд 1. Лимит контрагента скрыт. Ваш ход — назовите цифру (или условия) или завершите и получите разбор.');
+    pushSys('Раунд 1. Лимит контрагента скрыт. Ваш ход — напишите цифру и условия (например: «38%, взамен маркетинг в договоре») или вопрос.');
   }
 }
 
@@ -610,7 +616,7 @@ function renderSession() {
       <div id="hud" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;font-size:14px"><span>🎯 Очки: <strong id="hud-score">0</strong></span><span>🔥 Серия: <strong id="hud-streak">0</strong></span><span class="fine" id="hud-goal">${esc(session.deal.main.name || '')}</span></div>
       <div id="chat" aria-live="polite"></div>
       <div class="chat-input" style="margin-top:12px">
-        <input type="text" id="chat-in" placeholder="Ваш ход: цифра или условия…" autocomplete="off">
+        <input type="text" id="chat-in" placeholder="Ваш ход: цифра с условиями или вопрос…" autocomplete="off">
         <button class="btn" id="chat-send">Отправить</button>
       </div>
       <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
@@ -947,7 +953,7 @@ function viewCheat() {
     </div>
     <div class="card">
       <h3>🪜 Лестница Ackerman</h3>
-      <p>Из Восса, «Never Split the Difference». Шаги тают — контрагент видит, что вы у предела.</p>
+      <p>Из Восса, «Never Split the Difference»: максимальная цифра, затем уступки уменьшающимися шагами (65% → 85% пути → 100% цели). Шаги тают — контрагент видит, что вы у предела.</p>
       <ul class="clean">
         <li>Продавец доли: 135% → 115% → 105% → 100% цели (пример: 46% → 40% → 37% → 36,5%).</li>
         <li>Финал — некруглая цифра: 36,5% вместо 40. Точность = расчёт, а не фантазия.</li>
