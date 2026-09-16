@@ -37,14 +37,14 @@ function zoneCalc(d) {
   return { sell, r, t, o, lo, hi, width: hi - lo, exists };
 }
 
-/* ---------------- сценарии тренажёра ---------------- */
+/* ---------------- сценарии тренажёра (fallback, если scenarios.json не загрузился) ---------------- */
 const SCEN_FALLBACK = [
-  { id: 'procurement', title: 'Скупой закупщик',
-    desc: 'Корпоративный закупщик: жёсткий бюджет, сравнивает с конкурентами, уйти ему легко.',
-    tone: 'холодно, формально, давит на цену', stepPct: 0.45, patience: 4 },
-  { id: 'cfo', title: 'CFO с жёстким бюджетом',
-    desc: 'Финансовый директор: только цифры, ROI и бюджетный цикл. Позиция сильная, времени мало.',
-    tone: 'по делу, с цифрами, торопит', stepPct: 0.3, patience: 3 }
+  { id: 'publisher', title: 'Издатель ↔ студия',
+    desc: 'Издательский договор: давит на долю, ссылается на портфель и бюджет маркетинга.',
+    tone: 'по делу, с цифрами портфеля', unit: '%', sell: true, stepPct: 0.45, patience: 4 },
+  { id: 'angel', title: 'Ангел вне индустрии',
+    desc: 'Деньги есть, понимания игр нет: «гарантии», «лотерея», доля и контроль платежей.',
+    tone: 'осторожно, ссылается на «свой опыт в другом бизнесе»', unit: '%', sell: false, stepPct: 0.3, patience: 3 }
 ];
 async function loadScenarios() {
   try {
@@ -118,11 +118,12 @@ function viewBrief() {
   return `
   <div class="card">
     <span class="badge">Суть за две минуты</span>
-    <h2>ZOPA — зона возможного соглашения</h2>
-    <p><strong>ZOPA (Zone of Possible Agreement)</strong> — диапазон условий, приемлемых <strong>и для вас, и для них</strong>. Продавец готов отдать не дешевле 600, покупатель купить не дороже 750 → зона 600–750. Нет пересечения — сделки нет, пока кто-то не изменит позицию или состав предметов торга.</p>
+    <h2>ZOPA — зона возможного соглашения в геймдеве</h2>
+    <p><strong>ZOPA (Zone of Possible Agreement)</strong> — диапазон условий, приемлемых <strong>и для вас, и для них</strong>. Пример из индустрии: студия готова отдать долю роялти не дешевле 30%, издатель берёт не дороже 40% → зона 30–40%. Нет пересечения — сделки нет, пока кто-то не изменит позицию или состав предметов торга.</p>
+    <p>В геймдеве метрика почти никогда не одна. Цену торга задают <strong>предметы размена</strong>: аванс и его рекуперация, маркетинговый бюджет, права на сиквелы, этапы выплат, творческий контроль. Сделка «по одной цифре» — самая дорогая ошибка.</p>
     <p>Цепочка, на которой всё держится:</p>
     <ul class="clean">
-      <li><strong>BATNA</strong> — что вы сделаете, если сделки не будет. Ваш рычаг.</li>
+      <li><strong>BATNA</strong> — что вы сделаете, если сделки не будет: другой издатель, Epic/Steam напрямую, грант, кроудфандинг, текущая работа команды. Ваш рычаг.</li>
       <li><strong>Резерв</strong> — точка выхода, худшее приемлемое. Логично вытекает из BATNA.</li>
       <li><strong>Цель</strong> — амбициозный, но реальный финал.</li>
       <li><strong>ZOPA</strong> — пересечение вашего резерва и их лимита.</li>
@@ -131,11 +132,21 @@ function viewBrief() {
   </div>
 
   <div class="card">
+    <h3>Специфика индустрии</h3>
+    <ul class="clean">
+      <li><strong>Инвесторы вне геймдева</strong> — частая российская реальность: деньги есть, понимания рынка нет. Требуют «гарантий возврата» и долю 40–50%. Ваш ход: перевод разговора с «лотереи» на цифры (вишлисты, конверсия, вишлист→продажи) и долю по этапам, а не сразу всю.</li>
+      <li><strong>Не отдавайте IP целиком.</strong> Права на игру — главный долгосрочный актив студии. Сиквелы, мультипликация, мерч — отдельные предметы торга, а не «приложение к доле».</li>
+      <li><strong>Аванс ≠ доход</strong>: под полной рекуперацией платит фактически издатель — вашей студией. Считайте долю ПОСЛЕ рекуперации, не до.</li>
+      <li><strong>Российская рамка</strong>: издатели и фонды (VK Play, Indie Go) смотрят на аудиторию платформ, возрастные рейтинги, локализацию и господдержку — это тоже предметы торга.</li>
+    </ul>
+  </div>
+
+  <div class="card">
     <h3>Что здесь есть</h3>
     <ul class="clean">
       <li><strong>«Собрать»</strong> — конструктор подготовки: зона, первый оффер, лестница уступок, три равноценных пакета (MESO) и one-sheet для стола.</li>
-      <li><strong>«Тренажёр»</strong> — переговоры против бота со скрытым резервом. Нащупайте его зону, не выдав свою. В конце — разбор.</li>
-      <li><strong>«Шпаргалка»</strong> — механики с доказательной базой: якорение, Ackerman, MESO, расширение отрицательной зоны.</li>
+      <li><strong>«Тренажёр»</strong> — 4 кейса геймдев-переговоров с ИИ-контрагентом: издатель, ангел, buyout, аутсорс. Скрытый резерв, очки, разбор.</li>
+      <li><strong>«Шпаргалка»</strong> — механики с доказательной базой + предметы торга геймдева: якорение, Ackerman, MESO, расширение отрицательной зоны.</li>
     </ul>
     <p class="fine" style="margin-top:10px">Методология — открытый канон переговорного анализа: Raiffa «The Art and Science of Negotiation» (1982), Fisher &amp; Ury «Getting to Yes», Harvard Program on Negotiation, Lax–Sebenius «3-D Negotiation», Voss «Never Split the Difference».</p>
   </div>
@@ -144,17 +155,17 @@ function viewBrief() {
     <div class="card">
       <h3>Три правила до стола</h3>
       <ul class="clean">
-        <li>Усильте BATNA — это единственная настоящая сила.</li>
-        <li>Первое число сильно предсказывает финал (Galinsky &amp; Mussweiler, 2001). Готовьте якорь заранее.</li>
-        <li>Никогда не принимайте хуже своего резерва. Никогда.</li>
+        <li>Усильте BATNA: вторая площадка или издатель — единственная настоящая сила.</li>
+        <li>Первое число сильно предсказывает финал (Galinsky &amp; Mussweiler, 2001). Готовьте якорь заранее — от вишлистов, retention и сопоставимых сделок.</li>
+        <li>Никогда не принимайте хуже своего резерва. Никогда — даже если «других издателей нет».</li>
       </ul>
     </div>
     <div class="card">
       <h3>Три правила за столом</h3>
       <ul class="clean">
-        <li>Не торгуйтесь против себя: уступка — только в обмен на их движение.</li>
+        <li>Не торгуйтесь против себя: уступка — только в обмен на их движение (маркетинг, сроки, права).</li>
         <li>Уступки уменьшающимися шагами — сигнал, что зона сужается.</li>
-        <li>Зоны нет? Меняйте состав: сроки, объём, гарантии, условия. Не ломайте цену.</li>
+        <li>Зоны нет? Меняйте состав: аванс, доля, маркетинг, права, этапы. Не ломайте цену.</li>
       </ul>
     </div>
   </div>
@@ -168,7 +179,7 @@ function viewBrief() {
 function blankState() {
   return {
     step: 1, title: '', role: '',
-    main: { name: 'Сумма сделки, ₽', reserve: '', target: '' },
+    main: { name: 'Доля роялти студии, %', reserve: '', target: '' },
     opp: { name: '', limit: '' },
     extras: [ { name: '', note: '' }, { name: '', note: '' }, { name: '', note: '' } ]
   };
@@ -177,7 +188,7 @@ function stFromDeal(d) {
   if (!d) return null;
   const s = blankState();
   s.title = d.title || ''; s.role = d.role || '';
-  s.main = { name: (d.main && d.main.name) || 'Сумма сделки, ₽', reserve: d.main ? d.main.reserve : '', target: d.main ? d.main.target : '' };
+  s.main = { name: (d.main && d.main.name) || 'Доля роялти студии, %', reserve: d.main ? d.main.reserve : '', target: d.main ? d.main.target : '' };
   s.opp = { name: (d.opp && d.opp.name) || '', limit: d.opp ? d.opp.limit : '' };
   if (d.extras) s.extras = d.extras.slice(0, 3).concat(Array(3).fill({name:'',note:''})).slice(0,3).map((e) => ({ name: e.name || '', note: e.note || '' }));
   s.step = 5;
@@ -204,40 +215,45 @@ function renderWiz() {
   if (S === 1) {
     html += `<h2>Ваша роль в переговорах</h2>
     <p>От этого зависит, с какой стороны считать зону.</p>
-    <div class="field"><label><input type="radio" name="role" value="sell" ${st.role === 'sell' ? 'checked' : ''}> <strong>Отдаю ценность</strong> — продаю товар/услугу или торгуюсь за зарплату. Моя цифра — минимум, хочу больше.</label></div>
-    <div class="field"><label><input type="radio" name="role" value="buy" ${st.role === 'buy' ? 'checked' : ''}> <strong>Получаю ценность</strong> — покупаю, нанимаю, закупаю. Моя цифра — потолок, хочу дешевле.</label></div>
+    <div class="field"><label><input type="radio" name="role" value="sell" ${st.role === 'sell' ? 'checked' : ''}> <strong>Отдаю ценность</strong> — студия: продаёт игру издателю, берёт заказ (порт, аутсорс) или отдаёт долю инвестору. Моя цифра — минимум, хочу больше.</label></div>
+    <div class="field"><label><input type="radio" name="role" value="buy" ${st.role === 'buy' ? 'checked' : ''}> <strong>Получаю ценность</strong> — издатель/инвестор: покупаю долю, права на издание, нанимаю студию. Моя цифра — потолок, хочу дешевле.</label></div>
     <div class="field"><label>О чём переговоры (необязательно)</label>
-      <input type="text" id="w-title" placeholder="Например: внедрение аналитики для ритейлера" value="${esc(st.title)}"></div>
+      <input type="text" id="w-title" placeholder="Например: издательский договор на «Тайгу-33»" value="${esc(st.title)}"></div>
     <button class="btn" id="w-next" ${st.role ? '' : 'disabled'}>Далее →</button>`;
   }
 
   if (S === 2) {
     html += `<h2>Ваша сторона</h2>
-    <div class="field"><label>Что обсуждаете</label><input type="text" id="w-mname" value="${esc(st.main.name)}"></div>
+    <div class="field"><label>Метрика торга (например: «Доля роялти студии, %», «Доля инвестора, %», «Бюджет порта, млн ₽», «Сумма аванса, ₽»)</label><input type="text" id="w-mname" value="${esc(st.main.name)}"></div>
     <div class="field"><label>${st.role === 'sell' ? 'Ваш минимум (резерв) — ниже нет сделки' : 'Ваш потолок (резерв) — выше нет сделки'}</label>
-      <input type="number" id="w-reserve" placeholder="${st.role === 'sell' ? '600000' : '750000'}" value="${esc(st.main.reserve)}">
-      <div class="sub">Точка выхода. Всё, что хуже, — хуже вашей BATNA.</div></div>
+      <input type="number" step="any" id="w-reserve" placeholder="${st.role === 'sell' ? '30 (не меньше 30% студии)' : '45 (не больше 45% инвестору)'}" value="${esc(st.main.reserve)}">
+      <div class="sub">Точка выхода. Всё, что хуже, — хуже вашей BATNA (другой издатель / Epic напрямую / отказ от проекта).</div></div>
     <div class="field"><label>Ваша цель (реалистично-амбициозная)</label>
-      <input type="number" id="w-target" placeholder="${st.role === 'sell' ? '850000' : '620000'}" value="${esc(st.main.target)}"></div>
+      <input type="number" step="any" id="w-target" placeholder="${st.role === 'sell' ? '42' : '33'}" value="${esc(st.main.target)}"></div>
     <button class="btn ghost" id="w-back">← Назад</button> <button class="btn" id="w-next" ${st.main.reserve && st.main.target ? '' : 'disabled'}>Далее →</button>`;
   }
 
   if (S === 3) {
     html += `<h2>Оценка контрагента</h2>
-    <div class="field"><label>Кто оппонент (необязательно)</label><input type="text" id="w-opp-name" placeholder="Закупщик сети «Х», Алексей" value="${esc(st.opp.name)}"></div>
-    <div class="field"><label>${st.role === 'sell' ? 'Их максимум: сколько они способны заплатить (ваша оценка)' : 'Их минимум: ниже какой цены они точно не отдадут (ваша оценка)'}</label>
-      <input type="number" id="w-opp-limit" placeholder="${st.role === 'sell' ? '750000' : '550000'}" value="${esc(st.opp.limit)}">
-      <div class="sub">Оценка из рынка, их бюджета, публичных данных. Ошибка здесь — источник ошибок всей карты.</div></div>
+    <div class="field"><label>Кто оппонент (необязательно)</label><input type="text" id="w-opp-name" placeholder="Издатель «Севергейм», портфель 20+ релизов" value="${esc(st.opp.name)}"></div>
+    <div class="field"><label>${st.role === 'sell' ? 'Их максимум: сколько они способны отдать (ваша оценка)' : 'Их минимум: ниже какого условия они точно не пойдут (ваша оценка)'}</label>
+      <input type="number" step="any" id="w-opp-limit" placeholder="${st.role === 'sell' ? '40' : '25'}" value="${esc(st.opp.limit)}">
+      <div class="sub">Оценка из рынка (медианы сделок, доли конкурентов), их портфеля и публичных данных. У издателя ориентир — его типовая доля; у инвестора вне индустрии — тактически занижайте ожидания от его «экспертизы».</div></div>
     <button class="btn ghost" id="w-back">← Назад</button> <button class="btn" id="w-next" ${st.opp.limit ? '' : 'disabled'}>Далее →</button>`;
   }
 
   if (S === 4) {
-    html += `<h2>Дополнительные переменные</h2>
-    <p>Кроме суммы. Из них собираются обмены (логроллинг) и пакеты MESO. Можно пропустить.</p>`;
+    html += `<h2>Предметы размена (кроме главной цифры)</h2>
+    <p>В геймдеве зона почти всегда собирается из пакета. Типовые: маркетинговый бюджет, аванс и график рекуперации, права на сиквелы, этапы выплат, творческий контроль, локализация, порты. Из них собираются обмены и пакеты MESO. Можно пропустить.</p>`;
+    const ph = [
+      ['Маркетинговый бюджет', 'сумма и «поддержка после релиза» в договоре'],
+      ['Права на сиквелы', 'остаются за студией'],
+      ['Этапы выплат', 'вехи: демо / бета / релиз']
+    ];
     st.extras.forEach((e, i) => {
       html += `<div class="issue-row">
-        <input type="text" data-ex="${i}" data-k="name" placeholder="Переменная ${i + 1}: сроки" value="${esc(e.name)}">
-        <input type="text" data-ex="${i}" data-k="note" placeholder="Ваш ход: предоплата, сжатые сроки" value="${esc(e.note)}">
+        <input type="text" data-ex="${i}" data-k="name" placeholder="Переменная ${i + 1}: ${['маркетинг', 'права на сиквелы', 'этапы выплат'][i]}" value="${esc(e.name)}">
+        <input type="text" data-ex="${i}" data-k="note" placeholder="Ваш ход: ${['бюджет в договоре', 'IP не отдаём', 'по 25% на веху'][i]}" value="${esc(e.note)}">
       </div>`;
     });
     html += `<button class="btn ghost" id="w-back">← Назад</button> <button class="btn" id="w-next">Далее →</button>`;
@@ -295,11 +311,18 @@ function wireWiz(S) {
 }
 
 function anchorCalc(z) {
+  // Юнит-aware: для % и млн ₽ — процентная/кратная надбавка; для ₽ — классика с округлением до 1000
+  const pct = unitOf(st) === '%';
   if (z.exists) {
+    if (pct) {
+      const lift = Math.max(z.hi * 0.12, (z.t - z.r) * 0.5);
+      return z.sell ? Math.round((z.hi + lift) * 10) / 10 : Math.round((z.lo - lift) * 10) / 10;
+    }
     return z.sell
       ? Math.ceil((z.hi + 0.35 * Math.max(z.hi * 0.12, (z.t - z.r) * 0.5)) / 1000) * 1000 - 7
       : Math.floor((z.lo - 0.35 * Math.max(z.r * 0.12, (z.r - z.t))) / 1000) * 1000 + 3;
   }
+  if (pct) return z.sell ? Math.round(z.t * 1.18 * 10) / 10 : Math.round(z.t * 0.82 * 10) / 10;
   return z.sell ? Math.ceil(z.t * 1.18 / 1000) * 1000 - 7 : Math.floor(z.t * 0.82 / 1000) * 1000 + 3;
 }
 
@@ -316,7 +339,7 @@ function buildResult() {
       <div class="zbar" style="height:46px">
         <div class="zfill" style="left:0;width:100%"></div>
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-weight:800;font-size:15px">
-          <span>${fmt(z.lo)}</span><span style="color:#9fb2cc;font-size:12px;font-weight:700">зона · ширина ${fmt(z.width)}</span><span>${fmt(z.hi)}</span>
+          <span>${fmtB(z.lo)}</span><span style="color:#9fb2cc;font-size:12px;font-weight:700">зона · ширина ${fmtB(z.width)}</span><span>${fmtB(z.hi)}</span>
         </div>
       </div>
       <div class="zbar" style="background:transparent;border:none;height:22px;position:relative;margin-top:2px">
@@ -327,23 +350,23 @@ function buildResult() {
         <div style="position:absolute;left:${pT}%;top:-6px;bottom:-6px;width:3px;background:var(--ok)"></div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-top:2px">
-        <span style="color:var(--warn)">▲ ваш резерв ${fmt(z.r)}</span>
-        <span style="color:var(--ok)">▲ ваша цель ${fmt(z.t)}</span>
-        <span style="color:var(--acc2)">▲ оценка их лимита ${fmt(z.o)}</span>
+        <span style="color:var(--warn)">▲ ваш резерв ${fmtB(z.r)}</span>
+        <span style="color:var(--ok)">▲ ваша цель ${fmtB(z.t)}</span>
+        <span style="color:var(--acc2)">▲ оценка их лимита ${fmtB(z.o)}</span>
       </div>
     </div>
-    <p style="margin-top:12px">Любая сделка в диапазоне <strong>${fmt(z.lo)} — ${fmt(z.hi)}</strong> лучше для обеих сторон, чем уход со стола. Закрыв на цель (${fmt(z.t)}), вы забираете <strong>${z.sell ? fmt(z.t - z.r) + ' сверх минимума' : fmt(z.hi - z.t) + ' экономии от потолка'}</strong>. Оценка чужого лимита — гипотеза: проверяйте вопросами, не выдавая свой резерв.</p>`;
+    <p style="margin-top:12px">Любая сделка в диапазоне <strong>${fmtB(z.lo)} — ${fmtB(z.hi)}</strong> лучше для обеих сторон, чем уход со стола. Закрыв на цель (${fmtB(z.t)}), вы забираете <strong>${z.sell ? fmtB(z.t - z.r) + ' сверх резерва' : fmtB(z.hi - z.t) + ' запаса от потолка'}</strong>. Оценка чужого лимита — гипотеза: у издателя проверяйте через его портфель и медианы рынка, у инвестора — через цифры вишлистов и конверсий, не выдавая свой резерв.</p>`;
   } else {
     html += `<h2>⛔ Отрицательная зона (negative ZOPA)</h2>
-    <p>Пересечения нет: ${z.sell ? `ваш минимум ${fmt(z.r)} выше их максимума ${fmt(z.o)}` : `ваш потолок ${fmt(z.r)} ниже их минимума ${fmt(z.o)}`}. В текущей конфигурации сделки не будет.</p>
+    <p>Пересечения нет: ${z.sell ? `ваш минимум ${fmtB(z.r)} выше их максимума ${fmtB(z.o)}` : `ваш потолок ${fmtB(z.r)} ниже их минимума ${fmtB(z.o)}`}. В текущей конфигурации сделки не будет.</p>
     <div class="card" style="background:rgba(248,113,113,.06);border-color:rgba(248,113,113,.3)">
-      <h3>Что расширяет зону (по канону)</h3>
+      <h3>Что расширяет зону (по канону + геймдев)</h3>
       <ul class="clean">
-        <li><strong>Добавить переменные</strong> — сроки, объём, предоплата, гарантии, эксклюзив. Зона часто есть по пакету, хотя её нет по цене.</li>
-        <li><strong>Логроллинг</strong> — уступите по дешёвому для вас, получите по дорогому для них.</li>
-        <li><strong>Контракт с условием</strong> (contingent contract) — «если объём вырастет, цена пересматривается».</li>
-        <li><strong>Усилить BATNA</strong> — вторая альтернатива сдвигает ваш резерв.</li>
-        <li><strong>Перепроверить оценку</strong> — их лимит это ваша гипотеза: ищите их KPI, бюджетный цикл, замену вам.</li>
+        <li><strong>Добавить предметы торга</strong> — маркетинговый бюджет, аванс и график рекуперации, права на сиквелы, этапы выплат, локализация, творческий контроль. Зона часто есть по пакету, хотя её нет по доле.</li>
+        <li><strong>Логроллинг</strong> — уступите по дешёвому для вас (например, окно эксклюзива), получите по дорогому (маркетинг-бюджет, доля).</li>
+        <li><strong>Контракт с условием</strong> (contingent contract) — «если продажи выше X млн, доля пересматривается в вашу пользу».</li>
+        <li><strong>Усилить BATNA</strong> — вторая площадка (Epic/Steam напрямую), другой издатель, грант/кроудфандинг сдвигают весь коридор.</li>
+        <li><strong>Перепроверить оценку</strong> — их лимит это ваша гипотеза: портфель релизов, медианы сделок, бюджетный цикл, окно релиза.</li>
       </ul>
     </div>`;
   }
@@ -355,9 +378,9 @@ function buildResult() {
   const dir = z.sell ? 1 : -1;
   html += `<h3>Вход и уступки</h3>
   <ul class="clean">
-    <li><strong>Первый оффер (якорь): ${fmt(A)}</strong>. Агрессивно, но не абсурдно — и всегда с обоснованием (состав, рынок, сроки). Первое число сильно тянет финал за собой (Galinsky &amp; Mussweiler, 2001).</li>
-    <li><strong>Лестница уступок (Ackerman):</strong> ${fmt(A)} → ${fmt(L1)} → ${fmt(L2)} → <strong>${fmt(z.t)}</strong> — шаги уменьшаются (это сигнал: «зона кончается»). Только в обмен на их движение. Финальная цифра — некруглая и точная.</li>
-    <li><strong>Между уступками — вопросы</strong>, а не встречные предложения: «Как это работает для вашей стороны?», «Что произойдёт, если не сойдёмся?»</li>
+    <li><strong>Первый оффер (якорь): ${fmtB(A)}</strong>. Агрессивно, но не абсурдно — и всегда с обоснованием: вишлисты, retention, сравнимые сделки, деньги на маркетинг. Первое число сильно тянет финал за собой (Galinsky &amp; Mussweiler, 2001).</li>
+    <li><strong>Лестница уступок (Ackerman):</strong> ${fmtB(A)} → ${fmtB(L1)} → ${fmtB(L2)} → <strong>${fmtB(z.t)}</strong> — шаги уменьшаются (это сигнал: «зона кончается»). Только в обмен на их движение: бюджет маркетинга, этапы, права. Финальная цифра — некруглая и точная.</li>
+    <li><strong>Между уступками — вопросы</strong>, а не встречные предложения: «Как это работает для вашего портфеля?», «Что произойдёт с вашим окном релиза, если не сойдёмся?»</li>
   </ul>`;
 
   // MESO
@@ -366,15 +389,15 @@ function buildResult() {
   const packs = z.sell
     ? [z.t, Math.round(z.r + 0.65 * (z.t - z.r)), Math.round(z.r + 0.3 * (z.t - z.r))]
     : [z.t, Math.round(z.r - 0.7 * (z.r - z.t)), Math.round(z.r - 0.3 * (z.r - z.t))];
-  const exA = ex[0] ? ex[0].name.toLowerCase() : 'сжатые сроки';
-  const exB = ex[1] ? ex[1].name.toLowerCase() : 'предоплата 30%';
-  const exC = ex[2] ? ex[2].name.toLowerCase() : 'больший объём';
+  const exA = ex[0] ? ex[0].name.toLowerCase() : 'маркетинговый бюджет в договоре';
+  const exB = ex[1] ? ex[1].name.toLowerCase() : 'права на сиквелы у студии';
+  const exC = ex[2] ? ex[2].name.toLowerCase() : 'этапы выплат';
   html += `<h3>Три равноценных пакета (MESO)</h3>
   <p>Предложите одновременно — вы выглядите гибким, а их выбор покажет приоритеты (Medvec &amp; Galinsky). Проверьте на глаз: пакеты должны быть примерно равны для вас.</p>
   <ul class="clean">
-    <li><strong>Пакет А:</strong> ${fmt(packs[0])} — условия как есть.</li>
-    <li><strong>Пакет Б:</strong> ${fmt(packs[1])} ${z.sell ? '−' : '+'} взамен: ${esc(exA)} (${esc(ex[0] && ex[0].note ? ex[0].note : 'ваша выгода')}).</li>
-    <li><strong>Пакет В:</strong> ${fmt(packs[2])} ${z.sell ? '−' : '+'} взамен: ${esc(exBAndC(ex, exB, exC))}</li>
+    <li><strong>Пакет А:</strong> ${fmtB(packs[0])} — условия как есть.</li>
+    <li><strong>Пакет Б:</strong> ${fmtB(packs[1])} ${z.sell ? '−' : '+'} взамен: ${esc(exA)} (${esc(ex[0] && ex[0].note ? ex[0].note : 'ваша выгода')}).</li>
+    <li><strong>Пакет В:</strong> ${fmtB(packs[2])} ${z.sell ? '−' : '+'} взамен: ${esc(exBAndC(ex, exB, exC))}</li>
   </ul>`;
 
   html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
@@ -399,30 +422,31 @@ function buildOneSheetText() {
   const gap = z.t - A;
   const L = [];
   L.push('ONE SHEET — ' + (st.title || 'переговоры'));
-  L.push('Роль: ' + (z.sell ? 'отдаю ценность (продажа / кандидат)' : 'получаю ценность (покупка / работодатель)'));
+  L.push('Роль: ' + (z.sell ? 'отдаю ценность (студия: издание / заказ / доля инвестору)' : 'получаю ценность (издатель / инвестор)'));
   if (st.opp.name) L.push('Контрагент: ' + st.opp.name);
   L.push('');
   L.push('МОЯ ПОЗИЦИЯ (не раскрывать!)');
-  L.push('Резерв: ' + fmt(st.main.reserve));
-  L.push('Цель: ' + fmt(st.main.target));
-  L.push('Оценка их лимита: ' + fmt(st.opp.limit));
+  L.push('Метрика: ' + (st.main.name || 'главная цифра'));
+  L.push('Резерв: ' + fmtB(st.main.reserve));
+  L.push('Цель: ' + fmtB(st.main.target));
+  L.push('Оценка их лимита: ' + fmtB(st.opp.limit));
   L.push('');
-  L.push(z.exists ? 'ZOPA: ' + fmt(z.lo) + ' — ' + fmt(z.hi) + ' (ширина ' + fmt(z.width) + ')' : 'ZOPA ОТРИЦАТЕЛЬНАЯ → менять состав переменных, не цену');
+  L.push(z.exists ? 'ZOPA: ' + fmtB(z.lo) + ' — ' + fmtB(z.hi) + ' (ширина ' + fmtB(z.width) + ')' : 'ZOPA ОТРИЦАТЕЛЬНАЯ → менять состав предметов торга, не ломать цену');
   L.push('');
   if (z.exists) {
-    L.push('Якорь (первый оффер): ' + fmt(A) + ' — с обоснованием.');
-    L.push('Лестница: ' + fmt(A + gap * 0.571) + ' → ' + fmt(A + gap * 0.857) + ' → ' + fmt(z.t) + ' (шаги уменьшаются, финал некруглый).');
+    L.push('Якорь (первый оффер): ' + fmtB(A) + ' — с обоснованием (вишлисты, retention, сопоставимые сделки).');
+    L.push('Лестница: ' + fmtB(A + gap * 0.571) + ' → ' + fmtB(A + gap * 0.857) + ' → ' + fmtB(z.t) + ' (шаги уменьшаются, финал некруглый).');
     const ex = st.extras.filter((e) => e.name);
-    L.push('MESO: 3 пакета одновременно. Переменные: ' + (ex.map((e) => e.name).join(', ') || 'сроки / предоплата / объём') + '.');
+    L.push('MESO: 3 пакета одновременно. Предметы размена: ' + (ex.map((e) => e.name).join(', ') || 'маркетинг / права на сиквелы / этапы выплат') + '.');
   } else {
-    L.push('Зоны нет по цене — работать пакетом: переменные: ' + st.extras.filter((e) => e.name).map((e) => e.name).join(', ') + '.');
+    L.push('Зоны нет по цифре — работать пакетом: предметы размена: ' + st.extras.filter((e) => e.name).map((e) => e.name).join(', ') + '.');
   }
   L.push('');
   L.push('Вопросы за столом:');
-  L.push('— Что для них важно, кроме цены?');
-  L.push('— Что произойдёт у них, если сделки не будет?');
-  L.push('— Кто ещё должен быть в комнате?');
-  L.push('СТОП-ЛИНИЯ: не принимать хуже резерва. Точка.');
+  L.push('— Что для них важно, кроме доли/бюджета? (маркетинг, портфель, сроки)');
+  L.push('— Что произойдёт у них, если сделки не будет? (план релизов, окно)');
+  L.push('— Кто ещё должен быть в комнате? (продюсер, юрист, финдир)');
+  L.push('СТОП-ЛИНИЯ: не принимать хуже резерва. IP целиком — не отдавать. Точка.');
   return L.join('\n');
 }
 function copyText(t) {
@@ -430,6 +454,19 @@ function copyText(t) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(t).then(done, () => fallbackCopy(t, done));
   } else fallbackCopy(t, done);
+}
+// Юнит из названия метрики «Собрать»: «...%» → проценты, «млн ₽» → млн, иначе рубли
+function unitOf(st) {
+  const n = (st.main && st.main.name) || '';
+  if (/%/.test(n)) return '%';
+  if (/млн/.test(n)) return 'млн ₽';
+  return '₽';
+}
+function fmtB(n) {
+  const u = unitOf(st);
+  if (u === '%') return fmt(n) + '%';
+  if (u === 'млн ₽') return String(Math.round(Number(n) * 10) / 10).replace('.', ',') + ' млн ₽';
+  return fmt(n) + ' ₽';
 }
 function fallbackCopy(t, cb) {
   const ta = document.createElement('textarea');
@@ -448,13 +485,13 @@ function toast(txt) {
 /* ================= ЭКРАН 3: ТРЕНАЖЁР ================= */
 function demoDeal() {
   return {
-    demo: true, title: 'Демо: внедрение аналитики для ритейлера', role: 'sell',
-    main: { name: 'Сумма контракта, ₽', reserve: '600000', target: '850000' },
-    opp: { name: 'Закупщик сети', limit: '750000' },
+    demo: true, title: 'Демо: издательский договор (рубли, для быстрой разминки)', role: 'sell',
+    main: { name: 'Аванс под рекуперацию, ₽', reserve: '600000', target: '850000' },
+    opp: { name: 'Издатель «Севергейм»', limit: '750000' },
     extras: [
-      { name: 'Сроки старта', note: 'старт через 2 недели' },
-      { name: 'Предоплата', note: '30% для найма команды' },
-      { name: 'Объём работ', note: 'этап 2 — отдельным контрактом' }
+      { name: 'Маркетинговый бюджет', note: 'сумма и «поддержка после релиза» в договоре' },
+      { name: 'Права на сиквелы', note: 'остаются за студией' },
+      { name: 'Этапы выплат', note: 'по 25% на веху: демо / бета / релиз' }
     ]
   };
 }
@@ -525,8 +562,14 @@ function initDrill() {
 
 // Короткая строка про метрику кейса в шапке выбора контрагента
 function scenDealInfo(d) {
-  if (!d.demo) return `Резерв: ${fmt(d.main.reserve)} ₽, цель: ${fmt(d.main.target)} ₽.`;
-  return `Метрика: ${esc(d.main.name)}. Ваша стоп-линия: ${esc(d.main.reserve)}, цель: ${esc(d.main.target)}.`;
+  const name = (d.main && d.main.name) || '';
+  const val = (v) => {
+    if (/%/.test(name)) return fmt(v) + '%';
+    if (/млн/.test(name)) return String(Math.round(Number(v) * 10) / 10).replace('.', ',') + ' млн ₽';
+    return fmt(v) + ' ₽';
+  };
+  if (!d.demo) return `Резерв: ${val(d.main.reserve)}, цель: ${val(d.main.target)}.`;
+  return `Метрика: ${esc(name)}. Ваша стоп-линия: ${esc(d.main.reserve)}, цель: ${esc(d.main.target)}.`;
 }
 
 function startSession(scen, d) {
@@ -888,72 +931,93 @@ function viewCheat() {
   return `
   <div class="card">
     <span class="badge">Механики с доказательной базой</span>
-    <h2>Шпаргалка переговорщика</h2>
-    <p>Всё ниже — из рецензируемых исследований и канонических учебников. Коротко о том, что реально работает.</p>
+    <h2>Шпаргалка переговорщика геймдева</h2>
+    <p>Всё ниже — из рецензируемых исследований и канонических учебников, применённое к сделкам студий, издателей и инвесторов.</p>
   </div>
 
   <div class="cheat-grid">
     <div class="card">
       <h3>⚓ Якорение</h3>
-      <p>Первое число в переговорах сильно предсказывает финал (Galinsky &amp; Mussweiler, 2001). Кто предложил первым — тот задал коридор.</p>
+      <p>Первое число сильно предсказывает финал (Galinsky &amp; Mussweiler, 2001). Кто предложил первым — тот задал коридор.</p>
       <ul class="clean">
-        <li>Первый оффер — агрессивный, но объяснимый: всегда с обоснованием.</li>
-        <li>Против чужого якоря: не контр-цифрить сразу. Переспросить обоснование, обозначить свой диапазон позже.</li>
-        <li>Оборотная сторона: чересчур агрессивный якорь портит отношение (Maaravi et al., 2012).</li>
+        <li>Якорь с обоснованием из индустрии: вишлисты, retention, медианы долей сопоставимых сделок. «Игра X вышла с 400k вишлистов и села на 55%» звучит сильнее «хочу больше».</li>
+        <li>Против чужого якоря («рынок — 10%, берём что дают»): не контр-цифрить сразу. Переспросить обоснование, показать свой диапазон позже.</li>
+        <li>Чересчур агрессивный якорь (доля 90%) портит отношение (Maaravi et al., 2012) — издатель уйдёт к соседнему портфолио.</li>
       </ul>
     </div>
     <div class="card">
       <h3>🪜 Лестница Ackerman</h3>
-      <p>Из Восса, «Never Split the Difference». Для покупателя: первый оффер 65% цели → 85% → 95% → 100%. Шаги тают — контрагент видит, что вы у предела.</p>
+      <p>Из Восса, «Never Split the Difference». Шаги тают — контрагент видит, что вы у предела.</p>
       <ul class="clean">
-        <li>Между шагами — калиброванные вопросы, не встречные уступки.</li>
-        <li>Финал — некруглая цифра: 37 893 вместо 38 000.</li>
-        <li>Продавец зеркалит: 135% → 115% → 105% → 100%.</li>
-        <li>Распознать чужую лестницу: равные мелкие шаги к «финальной» цифре (разбор Уилера).</li>
+        <li>Продавец доли: 135% → 115% → 105% → 100% цели (пример: 46% → 40% → 37% → 36,5%).</li>
+        <li>Финал — некруглая цифра: 36,5% вместо 40. Точность = расчёт, а не фантазия.</li>
+        <li>Распознать чужую лестницу: равные мелкие шаги «28… 26,5… 25 — финал» — у них запас есть.</li>
       </ul>
     </div>
     <div class="card">
       <h3>🎁 MESO — три пакета сразу</h3>
-      <p>Несколько равноценных для вас офферов одновременно (Medvec &amp; Galinsky): вы выглядите гибким, их выбор показывает приоритеты.</p>
+      <p>Несколько равноценных для вас офферов одновременно (Medvec &amp; Galinsky): их выбор покажет приоритеты издателя/инвестора.</p>
       <ul class="clean">
-        <li>Пакеты мультипараметрические: цена + сроки + объём.</li>
+        <li>Геймдев-пример: (А) доля 38% + их маркетинг $200k; (Б) 34% + сиквелы у студии; (В) 30% + поэтапный аванс без полной рекуперации.</li>
         <li>По экспериментам: принятие 78% против 59% у одиночного оффера.</li>
         <li>Делайте их в «Собрать» — генератор встроен.</li>
       </ul>
     </div>
     <div class="card">
       <h3>🧩 Отрицательная ZOPA</h3>
-      <p>Зоны нет — это не конец, а смена задачи. Не давить на цену, а менять состав:</p>
+      <p>По доле зоны нет — это не конец, а смена задачи. Не давить на цифру, а менять состав:</p>
       <ul class="clean">
-        <li>Добавить переменные: сроки, объём, предоплата, гарантии, эксклюзив.</li>
-        <li>Логроллинг: дешёвое для вас ↔ дорогое для них.</li>
-        <li>Contingent contract: ставка на разногласия («если объём выше X — цена Y»).</li>
-        <li>Усилить свою BATNA — сдвинется весь коридор.</li>
+        <li>Добавить предметы: маркетинговый бюджет, этапы выплат, права, локализация, порты, творческий контроль.</li>
+        <li>Логроллинг: дешёвое для вас (окно эксклюзива) ↔ дорогое для них (доля, IP).</li>
+        <li>Contingent contract: «если продажи выше X — доля пересматривается».</li>
+        <li>Усилить BATNA: Epic/Steam напрямую, грант, кроудфандинг.</li>
       </ul>
     </div>
     <div class="card">
       <h3>🃏 Не раскрывай резерв</h3>
-      <p>Информационная асимметрия — сердце ZOPA. Промышленные системы (Smartsettle, Cybersettle) построены на blind bidding: алгоритм находит пересечение скрытых зон без их раскрытия.</p>
+      <p>Информационная асимметрия — сердце ZOPA. Свой минимум (доля, бюджет) — не называть.</p>
       <ul class="clean">
-        <li>Свой резерв — не называть никогда, ни под каким давлением.</li>
-        <li>«Лучшая цена сразу?» — разведка. Отвечайте диапазоном, не дном.</li>
-        <li>Их зону добирайте вопросами: «Что случится у вас, если не сойдёмся?»</li>
+        <li>«Какая доля вас устроит сразу?» — разведка. Отвечайте диапазоном рынка, не дном: «Сделки в жанре садятся на 35–50%, конкретика после билда».</li>
+        <li>Их зону добирайте вопросами: «Какой план по продажам вы закладываете?», «Что с окном релиза, если не сойдёмся?»</li>
+        <li>Их «нам поручили не выше 25%» — часто якорь, а не лимит. Проверяйте неспешностью.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🎮 Предметы торга геймдева</h3>
+      <p>Деньги — только один из ресурсов. Всё, что можно менять вместе с долей:</p>
+      <ul class="clean">
+        <li><strong>Аванс и рекуперация</strong> — «полная рекуперация» = студия платит за издание сама. График и порог — отдельный торг.</li>
+        <li><strong>Маркетинговый бюджет</strong> — цифра + обязательство «поддержки после релиза» письменно.</li>
+        <li><strong>Права</strong> — IP, сиквелы, мультипликация/мерч: отдавать частями и дорого, не «в придачу».</li>
+        <li><strong>Этапы выплат</strong> — вехи (демо/бета/релиз) вместо одной суммы.</li>
+        <li><strong>Творческий контроль</strong> — чей финальный вердикт по контенту.</li>
+        <li><strong>Окно и план релизов</strong> — у издателя тоже есть дедлайны, это ваш рычаг.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🧊 Инвестор вне индустрии</h3>
+      <p>Типовая российская ситуация: деньги есть (нефтесервис, ритейл, IT-аутсорс), понимания игр нет. Требует «гарантий» и контроль платежей.</p>
+      <ul class="clean">
+        <li>Не спорить «игры — не лотерея» эмоциями: переводить в цифры — вишлисты, конверсия вишлист→продажи, кривые retention, сравнимые релизы.</li>
+        <li>Долю — по этапам траншами, а не всю сразу: инвестор снижает риск, вы сохраняете долю.</li>
+        <li>Контроль платежей — можно; контроль дизайна — нет. Разделяйте деньги и творчество.</li>
+        <li>«Гарантий возврата» в венчуре не существует — предлагаем честную структуру рисков вместо фикции.</li>
       </ul>
     </div>
     <div class="card">
       <h3>📐 3-D Negotiation (Lax–Sebenius)</h3>
       <p>Три измерения большой сделки: тактики за столом, дизайн самой сделки и <strong>setup</strong> — кто, с чем и за каким столом.</p>
       <ul class="clean">
-        <li>Худший прокол — виртуозно торговаться не за тем столом.</li>
-        <li>Чек-лист setup: правильные стороны? правильная последовательность? правильное время?</li>
-        <li>Дизайн: «движение на северо-восток» — сделка, которая лучше для обеих сторон, чем текущий вариант.</li>
+        <li>Худший прокол — виртуозно торговаться о доле не с тем человеком (совет директоров платформы vs продюсер издателя).</li>
+        <li>Чек-лист setup: правильные стороны? правильная последовательность? правильное время (до/ после фестиваля, до конца финансового года)?</li>
+        <li>Дизайн: «движение на северо-восток» — пакет, который лучше для обеих сторон (ваше демо на их витрине + их бренд на вашем качестве).</li>
       </ul>
     </div>
   </div>
 
   <div class="card" style="margin-top:16px">
     <h3>📚 Источники</h3>
-    <p class="fine">Raiffa, The Art and Science of Negotiation (1982) · Fisher &amp; Ury, Getting to Yes (1981/1991) · Harvard Program on Negotiation · Lax &amp; Sebenius, 3-D Negotiation (2006) · Voss, Never Split the Difference (2016) · Galinsky &amp; Mussweiler, JPSP (2001) · Maaravi et al., Judgment and Decision Making (2012) · Medvec &amp; Galinsky, MESO-исследования.</p>
+    <p class="fine">Raiffa, The Art and Science of Negotiation (1982) · Fisher &amp; Ury, Getting to Yes (1981/1991) · Harvard Program on Negotiation · Lax &amp; Sebenius, 3-D Negotiation (2006) · Voss, Never Split the Difference (2016) · Galinsky &amp; Mussweiler, JPSP (2001) · Maaravi et al., Judgment and Decision Making (2012) · Medvec &amp; Galinsky, MESO-исследования. Отраслевые ориентиры долей/авансов — открытые обзоры издательских сделок 2024–2025 (медианы носят оценочный характер).</p>
   </div>`;
 }
 
